@@ -1,17 +1,15 @@
 
 package chatty;
 
-import chatty.util.DateTime;
-import chatty.util.Debugging;
-import chatty.util.ElapsedTime;
-import chatty.util.LogUtil;
-import chatty.util.MiscUtil;
-import chatty.util.SingleInstance;
+import chatty.util.*;
+
 import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
+
+import javax.swing.*;
 
 /**
  * Main class that starts the client as well as parses the commandline
@@ -53,18 +51,18 @@ public class Chatty {
      * by points. May contain a single "b" for beta versions, which are counted
      * as older (so 0.8.7b4 is older than 0.8.7).
      */
-    public static final String VERSION = "0.12-b1"; // Remember changing the version in the help
+    public static final String VERSION = "G1.0"; // Remember changing the version in the help
     
     /**
      * Enable Version Checker (if you compile and distribute this yourself, you
      * may want to disable this)
      */
-    public static final boolean VERSION_CHECK_ENABLED = true;
+    public static final boolean VERSION_CHECK_ENABLED = false;
     
     /**
      * The regular URL of the textfile where the most recent version is stored.
      */
-    public static final String VERSION_URL = "http://chatty.github.io/version.txt";
+    public static final String VERSION_URL = "http://recklessGreed.de/chatty/version.txt";
     
     /**
      * For testing purposes.
@@ -97,6 +95,10 @@ public class Chatty {
     private static String settingsDirInfo = null;
     
     private static String[] args;
+
+    private static SpellChecker spellChecker = null;
+
+    private static CustomVariablePlacer customVariablePlacer = null;
     
     /**
      * Parse the commandline arguments and start the actual chat client.
@@ -152,6 +154,10 @@ public class Chatty {
                 }
             }
         });
+
+        spellChecker = new SpellChecker();
+        customVariablePlacer = new CustomVariablePlacer();
+        spellChecker.init();
         
         LogUtil.startMemoryUsageLogging();
     }
@@ -313,5 +319,16 @@ public class Chatty {
             System.out.println(output);
         }
     }
-    
+
+    public static SpellChecker getSpellChecker() {
+        return spellChecker;
+    }
+
+    public static CustomVariablePlacer getCustomVariablePlacer() {
+        return customVariablePlacer;
+    }
+
+    public static void alert(String s) {
+        JOptionPane.showMessageDialog(null, s, "Info", 0);
+    }
 }
