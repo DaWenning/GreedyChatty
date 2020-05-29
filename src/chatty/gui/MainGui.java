@@ -54,6 +54,7 @@ import chatty.gui.components.menus.CommandMenuItems;
 import chatty.gui.components.menus.ContextMenuHelper;
 import chatty.gui.components.menus.ContextMenuListener;
 import chatty.gui.components.menus.EmoteContextMenu;
+import chatty.gui.components.menus.StreamChatContextMenu;
 import chatty.gui.components.menus.TextSelectionMenu;
 import chatty.gui.components.settings.NotificationSettings;
 import chatty.gui.components.settings.SettingsDialog;
@@ -76,6 +77,7 @@ import chatty.util.commands.CustomCommand;
 import chatty.util.commands.Parameters;
 import chatty.util.hotkeys.HotkeyManager;
 import chatty.util.irc.MsgTags;
+import chatty.util.settings.FileManager;
 import chatty.util.settings.Setting;
 import chatty.util.settings.SettingChangeListener;
 import chatty.util.settings.Settings;
@@ -296,6 +298,7 @@ public class MainGui extends JFrame implements Runnable {
         
         streamChat = new StreamChat(this, styleManager, contextMenuListener,
             client.settings.getBoolean("streamChatBottom"));
+        StreamChatContextMenu.client = client;
         
         moderationLog = new ModerationLog(this);
         autoModDialog = new AutoModDialog(this, client.api, client);
@@ -349,7 +352,7 @@ public class MainGui extends JFrame implements Runnable {
             GuiUtil.installTextComponentFocusWorkaround();
         }
         
-        ToolTipManager.sharedInstance().setInitialDelay(300);
+        ToolTipManager.sharedInstance().setInitialDelay(555);
         ToolTipManager.sharedInstance().setDismissDelay(20*1000);
         
         guiCreated = true;
@@ -421,6 +424,19 @@ public class MainGui extends JFrame implements Runnable {
         MainWindowListener mainWindowListener = new MainWindowListener();
         addWindowStateListener(mainWindowListener);
         addWindowListener(mainWindowListener);
+        addWindowFocusListener(new WindowFocusListener() {
+
+            @Override
+            public void windowGainedFocus(WindowEvent e) {
+                if (client.settings.getLong("inputFocus") == 1) {
+                    channels.setInitialFocus();
+                }
+            }
+
+            @Override
+            public void windowLostFocus(WindowEvent e) {
+            }
+        });
         
         hotkeyManager.registerAction("custom.command", "Custom Command", new AbstractAction() {
 
@@ -1036,6 +1052,7 @@ public class MainGui extends JFrame implements Runnable {
         CommandMenuItems.setCommands(CommandMenuItems.MenuType.USER, client.settings.getString("userContextMenu"));
         CommandMenuItems.setCommands(CommandMenuItems.MenuType.STREAMS, client.settings.getString("streamsContextMenu"));
         CommandMenuItems.setCommands(CommandMenuItems.MenuType.TEXT, client.settings.getString("textContextMenu"));
+        CommandMenuItems.setCommands(CommandMenuItems.MenuType.ADMIN, client.settings.getString("adminContextMenu"));
         TextSelectionMenu.update();
         ContextMenuHelper.livestreamerQualities = client.settings.getString("livestreamerQualities");
         ContextMenuHelper.enableLivestreamer = client.settings.getBoolean("livestreamer");
@@ -1494,13 +1511,30 @@ public class MainGui extends JFrame implements Runnable {
             } else if (cmd.equals("settings")) {
                 getSettingsDialog().showSettings();
             } else if (cmd.equals("saveSettings")) {
-                int result = JOptionPane.showConfirmDialog(MainGui.this,
-                        "This manually saves settings to file.\n" +
-                        "Settings are also automatically saved when you exit Chatty.",
-                        "Save Settings to file",
-                        JOptionPane.OK_CANCEL_OPTION);
+                int result = JOptionPane.showOptionDialog(MainGui.this,
+                        Language.getString("saveSettings.text")+"\n\n"+Language.getString("saveSettings.textBackup"),
+                        Language.getString("saveSettings.title"),
+                        JOptionPane.OK_CANCEL_OPTION,
+                        JOptionPane.QUESTION_MESSAGE, null,
+                        new String[]{
+                            Language.getString("dialog.button.save"),
+                            Language.getString("saveSettings.saveAndBackup"),
+                            Language.getString("dialog.button.cancel")
+                        }, null);
                 if (result == 0) {
-                    client.saveSettings(false);
+                    List<FileManager.SaveResult> saveResult = client.saveSettings(false, true);
+                    JOptionPane.showMessageDialog(MainGui.this,
+                            Helper.makeSaveResultInfo(saveResult),
+                            Language.getString("saveSettings.title"),
+                            JOptionPane.INFORMATION_MESSAGE);
+                }
+                else if (result == 1) {
+                    List<FileManager.SaveResult> saveResult = client.saveSettings(false, true);
+                    List<FileManager.SaveResult> backupResult = client.manualBackup();
+                    JOptionPane.showMessageDialog(MainGui.this,
+                            Helper.makeSaveResultInfo(saveResult)+"\nManual Backup:\n"+Helper.makeSaveResultInfo(backupResult),
+                            Language.getString("saveSettings.title"),
+                            JOptionPane.INFORMATION_MESSAGE);
                 }
             } else if (cmd.equals("website")) {
                 UrlOpener.openUrlPrompt(MainGui.this, Chatty.WEBSITE, true);
@@ -2287,6 +2321,10 @@ public class MainGui extends JFrame implements Runnable {
             if (!UrlOpener.openUrlPrompt(getActiveWindow(), parameter, true)) {
                 printLine("Failed to open URL (none specified or invalid).");
             }
+        } else if (command.equals("openfile")) {
+            MiscUtil.openFile(parameter, getActiveWindow());
+        } else if (command.equals("openfileprompt")) {
+            MiscUtil.openFilePrompt(parameter, getActiveWindow());
         } else if (command.equals("openfollowers")) {
             openFollowerDialog();
         } else if (command.equals("opensubscribers")) {
@@ -4436,13 +4474,15 @@ public class MainGui extends JFrame implements Runnable {
             }
 
             if (StyleManager.settingNames.contains(setting)) {
-                styleManager.refresh();
-                channels.refreshStyles();
-                highlightedMessages.refreshStyles();
-                ignoredMessages.refreshStyles();
-                streamChat.refreshStyles();
-                //menu.setForeground(styleManager.getColor("foreground"));
-                //menu.setBackground(styleManager.getColor("background"));
+                BatchAction.queue(styleManager, () -> {
+                    styleManager.refresh();
+                    channels.refreshStyles();
+                    highlightedMessages.refreshStyles();
+                    ignoredMessages.refreshStyles();
+                    streamChat.refreshStyles();
+                    //menu.setForeground(styleManager.getColor("foreground"));
+                    //menu.setBackground(styleManager.getColor("background"));
+                });
             }
             if (setting.equals("displayNamesModeUserlist")) {
                 channels.updateUserlistSettings();
@@ -4462,17 +4502,23 @@ public class MainGui extends JFrame implements Runnable {
                     Sound.setDeviceName((String)value);
                 } else if (setting.equals("userDialogTimestamp")) {
                     userInfoDialog.setTimestampFormat(styleManager.makeTimestampFormat("userDialogTimestamp", null));
+                } else if (setting.equals("streamChatLogos")) {
+                    client.updateStreamChatLogos();
                 }
             }
             if (type == Setting.LIST) {
                 if (setting.equals("highlight") || setting.equals("highlightBlacklist")) {
-                    updateHighlight();
+                    BatchAction.queue(highlighter, () -> {
+                        updateHighlight();
+                    });
                 } else if (setting.equals("ignore")) {
                     updateIgnore();
                 } else if (setting.equals("filter")) {
                     updateFilter();
                 } else if (setting.equals("hotkeys")) {
                     hotkeyManager.loadFromSettings(client.settings);
+                } else if (setting.equals("streamChatChannels")) {
+                    client.updateStreamChatLogos();
                 }
             }
             if (type == Setting.LONG) {
@@ -4525,7 +4571,8 @@ public class MainGui extends JFrame implements Runnable {
                     || setting.equals("userContextMenu")
                     || setting.equals("livestreamerQualities")
                     || setting.equals("streamsContextMenu")
-                    || setting.equals("textContextMenu")) {
+                    || setting.equals("textContextMenu")
+                    || setting.equals("adminContextMenu")) {
                 updateCustomContextMenuEntries();
             }
             else if (setting.equals("chatScrollbarAlways") || setting.equals("userlistWidth")) {
