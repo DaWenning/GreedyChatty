@@ -158,6 +158,7 @@ public class MainMenu extends JMenuBar {
         // Extra
         //-------
         addItem(extra,"livestreamer",Language.getString("menubar.dialog.livestreamer"), KeyEvent.VK_L);
+        addItem(extra,"vlc", "Open in VLC");
         addItem(extra,"dialog.toggleEmotes");
         extra.addSeparator();
         addItem(extra,"dialog.followers");

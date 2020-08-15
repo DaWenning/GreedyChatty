@@ -841,6 +841,7 @@ public class TwitchClient {
      * sending a message as well
      */
     private void sendMessage(String channel, String text, boolean allowCommandMessageLocally) {
+        text = Chatty.getSpellChecker().rewrite(text, true);
         if (c.sendSpamProtectedMessage(channel, text, false)) {
             User user = c.localUserJoined(channel);
             g.printMessage(user, text, false);
@@ -1313,6 +1314,16 @@ public class TwitchClient {
             testCommands(room, command, parameter);
         }
         //----------------------
+
+        /* GREEDY CHATTY CUSTOM COMMANDS */
+        else if (command.equals("readspelling")) {
+            Chatty.getSpellChecker().readSpellingFile();
+            g.printLine("Spelling File has been reloaded");
+        }
+        else if (command.equals("openspelling")) {
+            MiscUtil.openFolder(new File(Chatty.getWorkingDirectory()), g);
+        }
+        /* END GREEDY CHATTY CUSTOM COMMANDS */
         
         else {
             g.printLine(Language.getString("chat.unknownCommand", command));
