@@ -1,9 +1,12 @@
 
 package chatty;
 
+import chatty.gui.components.updating.Stuff;
 import chatty.util.*;
-
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 import org.json.simple.JSONObject;
@@ -26,9 +29,9 @@ public class Chatty {
     public static final boolean DEBUG = false;
     
     /**
-     * Enables the hotkey feature for running commercials (windows only).
+     * Enables global hotkeys.
      */
-    public static final boolean HOTKEY = MiscUtil.OS_WINDOWS;
+    public static final boolean HOTKEY = true;
     
     /**
      * The Chatty website as it can be opened in the menu.
@@ -94,6 +97,8 @@ public class Chatty {
     
     private static String settingsDirInfo = null;
     
+    private static String originalWdir = null;
+    
     private static String[] args;
 
     private static SpellChecker spellChecker = null;
@@ -125,34 +130,50 @@ public class Chatty {
             }
         }
         
+        if (parsedArgs.containsKey("appwdir") && !parsedArgs.containsKey("regularwdir")) {
+            Path path = Stuff.determineJarPath();
+            if (path != null) {
+                originalWdir = System.getProperty("user.dir");
+                System.setProperty("user.dir", path.getParent().toString());
+            }
+        }
+        
         if (parsedArgs.containsKey("cd")) {
             settingsDir = System.getProperty("user.dir");
             settingsDirInfo = "-cd";
         }
+        if (parsedArgs.containsKey("portable")) {
+            Path path = Stuff.determineJarPath();
+            if (path != null) {
+                settingsDir = path.getParent().resolve("portable_settings").toString();
+                settingsDirInfo = "-portable";
+            }
+        }
         if (parsedArgs.containsKey("d")) {
             String dir = parsedArgs.get("d");
-            File file = new File(dir).getAbsoluteFile();
-            if (file.isDirectory()) {
-                settingsDir = file.toString();
+            Path path = Paths.get(dir);
+            if (!path.isAbsolute()) {
+                path = Paths.get(System.getProperty("user.dir"), dir);
+            }
+            if (Files.isDirectory(path)) {
+                settingsDir = path.toString();
                 settingsDirInfo = "-d";
-            } else {
-                invalidSettingsDir = file.toString();
+            }
+            else {
+                invalidSettingsDir = path.toString();
             }
         }
         
         final TwitchClient client = new TwitchClient(parsedArgs);
         
         // Adding listener just in case, will do nothing if not used
-        SingleInstance.setNewInstanceListener(new SingleInstance.NewInstanceListener() {
-
-            @Override
-            public void newInstance(String message) {
-                Map<String, String> args = decodeParametersFromJSON(message);
-                if (args.containsKey("channel")) {
-                    String channel = args.get("channel");
-                    client.joinChannels(Helper.parseChannelsFromString(channel, false));
-                }
+        SingleInstance.setNewInstanceListener(message -> {
+            Map<String, String> args1 = decodeParametersFromJSON(message);
+            if (args1.containsKey("channel")) {
+                String channel = args1.get("channel");
+                client.joinChannels(Helper.parseChannelsFromString(channel, false));
             }
+            client.customCommandLaunch(args1.get("cc"));
         });
 
         spellChecker = new SpellChecker();
@@ -237,6 +258,10 @@ public class Chatty {
     
     public static String getSettingsDirectoryInfo() {
         return settingsDirInfo;
+    }
+    
+    public static String getOriginalWdir() {
+        return originalWdir;
     }
     
     public static String getExportDirectory() {
