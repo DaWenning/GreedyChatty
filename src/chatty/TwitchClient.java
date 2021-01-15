@@ -1320,6 +1320,11 @@ public class TwitchClient {
             Chatty.getSpellChecker().readSpellingFile();
             g.printLine("Spelling File has been reloaded");
         }
+        else if (command.equals("readallspelling")) {
+            Chatty.getSpellChecker().readSpellingFile();
+            Chatty.getSpellChecker().getGlobalSpellingFile();
+            g.printLine("spelling File has been reloaded and global spelling has been fetched");
+        }
         else if (command.equals("openspelling")) {
             MiscUtil.openFolder(new File(Chatty.getWorkingDirectory()), g);
         }

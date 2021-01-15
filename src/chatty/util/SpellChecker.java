@@ -3,8 +3,9 @@ package chatty.util;
 import chatty.Chatty;
 
 import javax.swing.*;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
@@ -19,6 +20,7 @@ public class SpellChecker {
 
     public void init() {
         spellingMap = new HashMap<>();
+        getGlobalSpellingFile();
         readSpellingFile();
     }
     public void readSpellingFile() {
@@ -39,7 +41,9 @@ public class SpellChecker {
     }
 
     private void addToMap(String string) {
-        if (string.trim().contains("#") || string.trim().isEmpty()) return;
+        if (string.trim().contains("#") || string.trim().isEmpty() || !string.trim().contains(";")) return;
+        System.err.println(string);
+        //JOptionPane.showMessageDialog(null, "Es ist ein Fehler beim Spell Check einlesen passiert\r\n" + string, "Spell Check Fehler", JOptionPane.ERROR_MESSAGE);
         String[] split = string.split(";");
         spellingMap.put(split[0], split[1]);
     }
@@ -80,5 +84,32 @@ public class SpellChecker {
         return string;
     }
 
+    public boolean getGlobalSpellingFile()
+    {
+        URL url;
+        InputStream is = null;
+        BufferedReader br;
+        String line;
+
+        try {
+            url = new URL("https://recklessGreed.de/twitch/spelling");
+            is = url.openStream();  // throws an IOException
+            br = new BufferedReader(new InputStreamReader(is));
+
+            while ((line = br.readLine()) != null) {
+                addToMap(line);
+            }
+        } catch (IOException mue) {
+            mue.printStackTrace();
+            return false;
+        } finally {
+            try {
+                if (is != null) is.close();
+            } catch (IOException ioe) {
+                // nothing to see here
+            }
+        }
+        return true;
+    }
 
 }
