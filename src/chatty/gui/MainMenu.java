@@ -177,6 +177,12 @@ public class MainMenu extends JMenuBar {
         addItem(streamHighlights, "stream.addhighlight", "Add Stream Highlight");
         addItem(streamHighlights, "openStreamHighlights", "Open Stream Highlights");
         extra.add(streamHighlights);
+
+        extra.addSeparator();
+        JMenu spelling = new JMenu("Spellchecker");
+        addItem(spelling, "spelling.reloadLocal");
+        addItem(spelling, "spelling.reloadAll");
+        extra.add(spelling);
         
         extra.addSeparator();
         JMenu debugOptions = new JMenu("Options");
