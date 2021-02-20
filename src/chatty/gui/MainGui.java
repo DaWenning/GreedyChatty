@@ -157,9 +157,9 @@ public class MainGui extends JFrame implements Runnable {
     private EventLog eventLog;
 
     // Helpers
-    private final Highlighter highlighter = new Highlighter();
-    private final Highlighter ignoreList = new Highlighter();
-    private final Highlighter filter = new Highlighter();
+    private final Highlighter highlighter = new Highlighter("highlight");
+    private final Highlighter ignoreList = new Highlighter("ignore");
+    private final Highlighter filter = new Highlighter("filter");
     private final MsgColorManager msgColorManager;
     private StyleManager styleManager;
     private TrayIconManager trayIcon;
@@ -827,9 +827,7 @@ public class MainGui extends JFrame implements Runnable {
                 }
 
                 startUpdatingState();
-
-                channels.setInitialFocus();
-
+                
                 windowStateManager.loadWindowStates();
                 windowStateManager.setWindowPosition(MainGui.this);
                 setVisible(true);
@@ -935,15 +933,18 @@ public class MainGui extends JFrame implements Runnable {
         if (client.settings.getBoolean("maximized")) {
             setExtendedState(MAXIMIZED_BOTH);
         }
-        updateHighlight();
-        updateIgnore();
-        updateFilter();
+        // Anything using highlighting format should be loaded after this
+        updateMatchingPresets();
         updateHistoryRange();
         updateHistoryVerticalZoom();
         updateNotificationSettings();
         updateChannelsSettings();
         updateHighlightNextMessages();
-
+        
+        msgColorManager.loadFromSettings();
+        notificationManager.loadFromSettings();
+        client.usericonManager.init();
+        
         // This should be done before updatePopoutSettings() because that method
         // will delete the attributes correctly depending on the setting
         channels.setPopoutAttributes(client.settings.getList("popoutAttributes"));
@@ -1021,17 +1022,30 @@ public class MainGui extends JFrame implements Runnable {
      * Tells the highlighter the current list of highlight-items from the settings.
      */
     private void updateHighlight() {
-        highlighter.update(StringUtil.getStringList(client.settings.getList("highlight")));
-        highlighter.updateBlacklist(StringUtil.getStringList(client.settings.getList("highlightBlacklist")));
+        BatchAction.queue(highlighter, () -> {
+            highlighter.update(StringUtil.getStringList(client.settings.getList("highlight")));
+            highlighter.updateBlacklist(StringUtil.getStringList(client.settings.getList("highlightBlacklist")));
+        });
     }
 
     private void updateIgnore() {
-        ignoreList.update(StringUtil.getStringList(client.settings.getList("ignore")));
-        ignoreList.updateBlacklist(StringUtil.getStringList(client.settings.getList("ignoreBlacklist")));
+        BatchAction.queue(ignoreList, () -> {
+            ignoreList.update(StringUtil.getStringList(client.settings.getList("ignore")));
+            ignoreList.updateBlacklist(StringUtil.getStringList(client.settings.getList("ignoreBlacklist")));
+        });
+    }
+    
+    private void updateMatchingPresets() {
+        Highlighter.HighlightItem.setGlobalPresets(Highlighter.HighlightItem.makePresets(client.settings.getList("matchingPresets")));
+        updateHighlight();
+        updateIgnore();
+        updateFilter();
     }
 
     private void updateFilter() {
-        filter.update(StringUtil.getStringList(client.settings.getList("filter")));
+        BatchAction.queue(filter, () -> {
+            filter.update(StringUtil.getStringList(client.settings.getList("filter")));
+        });
     }
 
     private void updateCustomContextMenuEntries() {
@@ -1714,6 +1728,15 @@ public class MainGui extends JFrame implements Runnable {
                 boolean selected = ((JMenuItem) e.getSource()).isSelected();
                 client.settings.setBoolean("historyVerticalZoom", selected);
             }
+            else if (cmd.startsWith("highlightSource.")) {
+                settingsDialog.showSettings("selectHighlight", cmd.substring("highlightSource.".length()));
+            }
+            else if (cmd.startsWith("ignoreSource.")) {
+                settingsDialog.showSettings("selectIgnore", cmd.substring("ignoreSource.".length()));
+            }
+            else if (cmd.startsWith("msgColorSource.")) {
+                settingsDialog.showSettings("selectMsgColor", cmd.substring("msgColorSource.".length()));
+            }
             else {
                 nameBasedStuff(e, channels.getActiveChannel().getStreamName());
             }
@@ -2387,7 +2410,7 @@ public class MainGui extends JFrame implements Runnable {
                 if (stream.equals("$active")) {
                     stream = channels.getActiveChannel().getStreamName();
                     if (stream == null) {
-                        printLine("Livestreamer: No channel open.");
+                        printLine("Streamlink: No channel open.");
                         return;
                     }
                 }
@@ -2395,7 +2418,7 @@ public class MainGui extends JFrame implements Runnable {
                     quality = split[1];
                 }
             }
-            printLine("Livestreamer: Opening stream..");
+            printLine("Streamlink: Opening stream..");
             livestreamerDialog.open(stream, quality);
         });
         client.commands.addEdt("help", p -> {
@@ -2995,14 +3018,16 @@ public class MainGui extends JFrame implements Runnable {
                 // Do stuff if ignored, without printing message
                 if (ignored) {
                     List<Match> ignoreMatches = null;
+                    Object ignoreSource = null;
                     if (!ignoredUser) {
                         // Text matches might not be valid if ignore was through
                         // ignored users list
                         ignoreMatches = ignoreList.getLastTextMatches();
+                        ignoreSource = ignoreList.getLastMatchItem();
                     }
                     ignoredMessages.addMessage(channel, user, text, action,
                             tagEmotes, bitsForEmotes, whisper, ignoreMatches,
-                            tags);
+                            ignoreSource, tags);
                     client.chatLog.message("ignored", user, text, action, channel);
                     ignoredMessagesHelper.ignoredMessage(channel);
                 }
@@ -3031,12 +3056,15 @@ public class MainGui extends JFrame implements Runnable {
                     if (highlighted) {
                         message.color = highlighter.getLastMatchColor();
                         message.backgroundColor = highlighter.getLastMatchBackgroundColor();
+                        message.colorSource = highlighter.getColorSource();
+                        message.highlightSource = highlighter.getLastMatchItem();
                     }
                     if (!(highlighted || hlByPoints) || client.settings.getBoolean("msgColorsPrefer")) {
                         ColorItem colorItem = msgColorManager.getMsgColor(user, localUser, text, tags);
                         if (!colorItem.isEmpty()) {
                             message.color = colorItem.getForegroundIfEnabled();
                             message.backgroundColor = colorItem.getBackgroundIfEnabled();
+                            message.colorSource = colorItem;
                         }
                     }
                     
@@ -3237,19 +3265,16 @@ public class MainGui extends JFrame implements Runnable {
     }
     
     public void testHotkey() {
-        SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                Channel panel = channels.getLastActiveChannel();
-                if (panel != null) {
-                    panel.selectPreviousUser();
-                }
+        GuiUtil.edt(() -> {
+            Channel panel = channels.getLastActiveChannel();
+            if (panel != null) {
+                panel.selectPreviousUser();
             }
         });
     }
     
     public void printLine(final String line) {
-        SwingUtilities.invokeLater(() -> {
+        GuiUtil.edt(() -> {
             Channel panel = channels.getLastActiveChannel();
             if (panel != null) {
                 printInfo(panel, InfoMessage.createInfo(line));
@@ -3258,32 +3283,24 @@ public class MainGui extends JFrame implements Runnable {
     }
     
     public void printSystem(final String line) {
-        SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                Channel panel = channels.getActiveChannel();
-                if (panel != null) {
-                    printInfo(panel, InfoMessage.createSystem(line));
-                }
+        GuiUtil.edt(() -> {
+            Channel panel = channels.getActiveChannel();
+            if (panel != null) {
+                printInfo(panel, InfoMessage.createSystem(line));
             }
         });
     }
 
     public void printLine(final Room room, final String line) {
-        SwingUtilities.invokeLater(() -> {
-            printInfo(room, line, null);
-        });
+        printInfo(room, line, null);
     }
     
     public void printInfo(final Room room, final String line, MsgTags tags) {
-        SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                if (room == null || room == Room.EMPTY) {
-                    printLine(line);
-                } else {
-                    printInfo(channels.getChannel(room), InfoMessage.createInfo(line, tags));
-                }
+        GuiUtil.edt(() -> {
+            if (room == null || room == Room.EMPTY) {
+                printLine(line);
+            } else {
+                printInfo(channels.getChannel(room), InfoMessage.createInfo(line, tags));
             }
         });
     }
@@ -3334,6 +3351,8 @@ public class MainGui extends JFrame implements Runnable {
                     message.highlightMatches = highlighter.getLastTextMatches();
                     message.color = highlighter.getLastMatchColor();
                     message.bgColor = highlighter.getLastMatchBackgroundColor();
+                    message.colorSource = highlighter.getColorSource();
+                    message.highlightSource = highlighter.getLastMatchItem();
 
                     if (!highlighter.getLastMatchNoNotification()) {
                         channels.setChannelHighlighted(channel);
@@ -3352,6 +3371,7 @@ public class MainGui extends JFrame implements Runnable {
                     if (!colorItem.isEmpty()) {
                         message.color = colorItem.getForegroundIfEnabled();
                         message.bgColor = colorItem.getBackgroundIfEnabled();
+                        message.colorSource = colorItem;
                     }
                 }
                 // After colors and everything is set
@@ -3365,7 +3385,8 @@ public class MainGui extends JFrame implements Runnable {
                 channels.setChannelNewMessage(channel);
             }
         } else if (!message.isHidden()) {
-            ignoredMessages.addInfoMessage(channel.getRoom().getDisplayName(), message.text);
+            ignoredMessages.addInfoMessage(channel.getChannel(), message.text,
+                    ignoreList.getLastTextMatches(), ignoreList.getLastMatchItem());
             client.chatLog.info("ignored", message.text, channel.getChannel());
         }
         
@@ -4573,13 +4594,11 @@ public class MainGui extends JFrame implements Runnable {
             }
             if (type == Setting.LIST) {
                 if (setting.equals("highlight") || setting.equals("highlightBlacklist")) {
-                    BatchAction.queue(highlighter, () -> {
-                        updateHighlight();
-                    });
+                    updateHighlight();
                 } else if (setting.equals("ignore") || setting.equals("ignoreBlacklist")) {
-                    BatchAction.queue(ignoreList, () -> {
-                        updateIgnore();
-                    });
+                    updateIgnore();
+                } else if (setting.equals("matchingPresets")) {
+                    updateMatchingPresets();
                 } else if (setting.equals("filter")) {
                     updateFilter();
                 } else if (setting.equals("hotkeys")) {
@@ -4632,7 +4651,7 @@ public class MainGui extends JFrame implements Runnable {
                 client.addressbook.setSomewhatUniqueCategories((String)value);
             }
             if (setting.equals("commands")) {
-                client.customCommands.loadFromSettings();
+                client.updateCustomCommands();
             }
             if (setting.equals("channelContextMenu")
                     || setting.equals("userContextMenu")

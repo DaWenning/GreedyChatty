@@ -73,7 +73,7 @@ public final class Channel extends JPanel {
         setName(room.getDisplayName());
         
         // Text Pane
-        text = new ChannelTextPane(main,styleManager);
+        text = new ChannelTextPane(main, styleManager);
         text.setContextMenuListener(contextMenuListener);
         
         setTextPreferredSizeTemporarily();
@@ -252,11 +252,6 @@ public final class Channel extends JPanel {
 
     @Override
     public boolean requestFocusInWindow() {
-        // Invoke later, because otherwise it wouldn't get focus for some
-        // reason.
-        SwingUtilities.invokeLater(() -> {
-            input.requestFocusInWindow();
-        });
         return input.requestFocusInWindow();
     }
     

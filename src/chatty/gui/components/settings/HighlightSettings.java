@@ -29,6 +29,7 @@ public class HighlightSettings extends SettingsPanel {
         return INFO_HEADER+SettingsUtil.getInfo("info-matching.html", type);
     }
     
+    private final ListSelector items;
     private final NoHighlightUsers noHighlightUsers;
     private final HighlightBlacklist highlightBlacklist;
     
@@ -36,7 +37,7 @@ public class HighlightSettings extends SettingsPanel {
         super(true);
         
         noHighlightUsers = new NoHighlightUsers(d);
-        highlightBlacklist = new HighlightBlacklist(d, "Highlight", "highlightBlacklist");
+        highlightBlacklist = new HighlightBlacklist(d, "highlight", "highlightBlacklist");
         
         JPanel base = addTitledPanel(Language.getString("settings.section.highlightMessages"), 0, true);
         
@@ -90,9 +91,9 @@ public class HighlightSettings extends SettingsPanel {
         
         gbc = d.makeGbc(0,5,2,1);
         gbc.insets = new Insets(5,10,5,5);
-        ListSelector items = d.addListSetting("highlight", "Highlight", 220, 250, true, true);
+        items = d.addListSetting("highlight", "Highlight", 220, 250, true, true);
         items.setInfo(getMatchingHelp("highlight"));
-        HighlighterTester tester = new HighlighterTester(d, true, "Highlight:");
+        HighlighterTester tester = new HighlighterTester(d, true, "highlight");
         tester.setAddToBlacklistListener(e -> {
             highlightBlacklist.addItem(e.getActionCommand());
         });
@@ -127,12 +128,26 @@ public class HighlightSettings extends SettingsPanel {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         base.add(highlightBlacklistButton, gbc);
         
+        JButton presetsButton = new JButton("Presets");
+        presetsButton.setMargin(GuiUtil.SMALLER_BUTTON_INSETS);
+        presetsButton.addActionListener(e -> {
+            d.showMatchingPresets();
+        });
+        gbc = d.makeGbc(0, 7, 1, 1);
+        gbc.insets = new Insets(1,10,5,5);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        base.add(presetsButton, gbc);
+        
         SettingsUtil.addSubsettings(highlightEnabled, highlightUsername,
                 highlightNextMessages, highlightOwnText, highlightIgnored,
                 highlightMatches, items, noHighlightUsersButton,
                 highlightBlacklistButton);
         
         SettingsUtil.addSubsettings(highlightMatches, highlightMatchesAll);
+    }
+    
+    public void selectItem(String item) {
+        items.setSelected(item);
     }
     
     private static class NoHighlightUsers extends JDialog {

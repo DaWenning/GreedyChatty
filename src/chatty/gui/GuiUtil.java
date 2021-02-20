@@ -736,8 +736,27 @@ public class GuiUtil {
         return new ImageIcon(img.getScaledInstance(w, h, Image.SCALE_SMOOTH));
     }
     
+    /**
+     * If the given icon is null, load icon with the given name instead.
+     * 
+     * @param icon The icon
+     * @param c Load the fallback icon relative to this class
+     * @param name The file name in the JAR
+     * @return The given icon, or the fallback icon loaded from the JAR
+     */
+    public static Icon getFallbackIcon(Icon icon, Class c, String name) {
+        if (icon == null) {
+            return getIcon(c, name);
+        }
+        return icon;
+    }
+    
     public static ImageIcon getIcon(Object o, String name) {
-        return new ImageIcon(Toolkit.getDefaultToolkit().createImage(o.getClass().getResource(name)));
+        return getIcon(o.getClass(), name);
+    }
+    
+    public static ImageIcon getIcon(Class c, String name) {
+        return new ImageIcon(Toolkit.getDefaultToolkit().createImage(c.getResource(name)));
     }
     
     /**
@@ -813,7 +832,7 @@ public class GuiUtil {
     
     /**
      * Run in the EDT, either by running it directly if already in the EDT or
-     * by using SwingUtilities.invokeAndWait.
+     * by using {@link SwingUtilities#invokeAndWait(Runnable)}.
      * 
      * @param runnable What to execute
      * @param description Used for logging when an error occurs
@@ -829,6 +848,21 @@ public class GuiUtil {
             catch (Exception ex) {
                 LOGGER.warning("Failed to execute edtAndWait ("+description+"): "+ex);
             }
+        }
+    }
+    
+    /**
+     * Run in the EDT, either by running it directly if already in the EDT or
+     * by using {@link SwingUtilities#invokeLater(Runnable)}.
+     * 
+     * @param runnable 
+     */
+    public static void edt(Runnable runnable) {
+        if (SwingUtilities.isEventDispatchThread()) {
+            runnable.run();
+        }
+        else {
+            SwingUtilities.invokeLater(runnable);
         }
     }
     
