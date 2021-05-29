@@ -341,6 +341,7 @@ public class SettingsManager {
         settings.addString("textContextMenu", "-\n" +
                 "Translate=/openUrlPrompt https://translate.google.com/#view=home&op=translate&sl=auto&tl=en&text=$$urlencode($(msg))");
         settings.addString("adminContextMenu", "!title=!title $(title)\n!game=!game $(game)");
+        settings.addBoolean("menuCommandLabels", false);
         
         settings.addBoolean("closeUserDialogOnAction", true);
         settings.addBoolean("openUserDialogByMouse", true);
@@ -420,8 +421,9 @@ public class SettingsManager {
         settings.addMap("windows", new HashMap<>(), Setting.STRING);
         settings.addLong("restoreMode", WindowStateManager.RESTORE_ON_START);
         settings.addBoolean("restoreOnlyIfOnScreen", true);
-        settings.addLong("highlightDock", 0);
-        settings.addLong("ignoreDock", 0);
+        settings.addMap("dock", new HashMap<>(), Setting.LONG);
+        settings.addMap("layouts", new HashMap<>(), Setting.LIST);
+        settings.addBoolean("restoreLayout", true);
 
         // Popouts
         settings.addBoolean("popoutSaveAttributes", true);
@@ -440,7 +442,13 @@ public class SettingsManager {
 
         // Tabs
         settings.addString("tabOrder", "normal");
-        settings.addString("tabsOpen", "active2");
+        Map<String, Long> tabsPos = new HashMap<>();
+        tabsPos.put("-nochannel-", -2L);
+        tabsPos.put("#", -1L);
+        tabsPos.put("-", 1L);
+        settings.addMap("tabsPos", tabsPos, Setting.LONG);
+        settings.addBoolean("tabsAutoSort", true);
+        settings.addString("tabsOpen", "activeChan");
         settings.addBoolean("tabsMwheelScrolling", false);
         settings.addBoolean("tabsMwheelScrollingAnywhere", true);
         settings.addString("tabsPlacement", "top");
@@ -451,6 +459,10 @@ public class SettingsManager {
         settings.addLong("tabsStatus", 32);
         settings.addLong("tabsActive", 128);
         settings.addLong("tabsPopoutDrag", 2);
+        settings.addLong("tabsMaxWidth", 200);
+        settings.addBoolean("tabsCloseEmpty", true);
+        settings.addBoolean("closeTabsSameType", true);
+        settings.addBoolean("tabsChanTitles", false);
         
         // Chat Window
         settings.addBoolean("chatScrollbarAlways", false);
@@ -603,6 +615,13 @@ public class SettingsManager {
         matchingPresetsDefault.add("# _special replaces every letter of words surrounded by ~ with: (<letter>[\\W_]*?)+");
         matchingPresetsDefault.add("_special $replace($1-,$\"~([^~]+)~\",$replace($(g1),$\"(\\w)\",$\"($1[\\\\W_]*?)+\",regRef),regCustom)");
         settings.addList("matchingPresets", matchingPresetsDefault, Setting.STRING);
+        
+        // Repeated Messages
+        settings.addBoolean("repeatMsg", false);
+        settings.addLong("repeatMsgSim", 80);
+        settings.addLong("repeatMsgRep", 2);
+        settings.addLong("repeatMsgTime", 3600);
+        settings.addString("repeatMsgMatch", "!status:M");
 
         // Chat Logging
         settings.addString("logMode", "always");
