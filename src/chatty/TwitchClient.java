@@ -232,6 +232,7 @@ public class TwitchClient {
         if (settings.getBoolean("abAutoImport")) {
             addressbook.enableAutoImport();
         }
+        Helper.addressbook = addressbook;
         
         initDxSettings();
         
@@ -940,6 +941,10 @@ public class TwitchClient {
      */
     public boolean isChannelOpen(String channel) {
         return c.isChannelOpen(channel);
+    }
+    
+    public boolean isChannelJoined(String channel) {
+        return c.onChannel(channel, false);
     }
     
     public boolean isUserlistLoaded(String channel) {
@@ -1669,6 +1674,8 @@ public class TwitchClient {
             args.add("tduva");
             ModeratorActionData data = new ModeratorActionData("", "", "", room.getStream(), "denied_automod_message", args, "asdas", "TEST");
             g.printModerationAction(data, false);
+        } else if (command.equals("simulatepubsub")) {
+            pubsub.simulate(parameter);
         } else if (command.equals("repeat")) {
             String[] split = parameter.split(" ", 2);
             int count = Integer.parseInt(split[0]);
@@ -2290,7 +2297,9 @@ public class TwitchClient {
             if (message.data != null) {
                 if (message.data instanceof ModeratorActionData) {
                     ModeratorActionData data = (ModeratorActionData) message.data;
-                    if (data.stream != null) {
+                    // A regular mod action that doesn't contain a mod action should be ignored
+                    boolean empty = data.type == ModeratorActionData.Type.OTHER && data.moderation_action.isEmpty() && data.args.isEmpty();
+                    if (data.stream != null && !empty) {
                         String channel = Helper.toChannel(data.stream);
                         g.printModerationAction(data, data.created_by.equals(c.getUsername()));
                         chatLog.modAction(data);
@@ -2473,9 +2482,9 @@ public class TwitchClient {
         }
 
         @Override
-        public void autoModResult(String result, String msgId) {
-            g.autoModRequestResult(result, msgId);
-            autoModCommandHelper.requestResult(result, msgId);
+        public void autoModResult(TwitchApi.AutoModAction action, String msgId, TwitchApi.AutoModActionResult result) {
+            g.autoModRequestResult(action, msgId, result);
+            autoModCommandHelper.requestResult(action, msgId, result);
         }
 
         @Override
@@ -3026,6 +3035,11 @@ public class TwitchClient {
         public void onInfo(String message) {
             g.printLine(message);
         }
+        
+        @Override
+        public void onJoinScheduled(String channel) {
+            g.joinScheduled(channel);
+        }
 
         @Override
         public void onJoinAttempt(Room room) {
@@ -3143,9 +3157,11 @@ public class TwitchClient {
             if (error == TwitchConnection.JoinError.NOT_REGISTERED) {
                 String validChannels = Helper.buildStreamsString(toJoin);
                 if (c.isOffline()) {
-                    g.openConnectDialog(validChannels);
+                    prepareConnectionWithChannel(validChannels);
                 }
-                g.printLine(Language.getString("chat.joinError.notConnected", validChannels));
+                else {
+                    g.printLine(Language.getString("chat.joinError.notConnected", validChannels));
+                }
             } else if (error == TwitchConnection.JoinError.ALREADY_JOINED) {
                 if (toJoin.size() == 1) {
                     g.switchToChannel(errorChannel);

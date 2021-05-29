@@ -380,7 +380,7 @@ public class User implements Comparable<User> {
     
     public synchronized void addModAction(ModeratorActionData data) {
         setFirstSeen();
-        addLine(new ModAction(System.currentTimeMillis(), data.getCommandAndParameters()));
+        addLine(new ModAction(System.currentTimeMillis(), data.moderation_action+" "+ModLogInfo.makeArgsText(data)));
     }
     
     private List<ModeratorActionData> cachedBanInfo;
@@ -483,6 +483,26 @@ public class User implements Comparable<User> {
      */
     public synchronized List<Message> getMessages() {
         return new ArrayList<>(lines);
+    }
+    
+    public synchronized int getNumberOfSimilarChatMessages(String compareMsg, long timeframe, float minSimilarity) {
+        compareMsg = StringUtil.prepareForSimilarityComparison(compareMsg);
+        int result = 0;
+        long checkUntilTime = System.currentTimeMillis() - timeframe * 1000;
+        for (int i=lines.size() - 1; i>=0; i--) {
+            Message m = lines.get(i);
+            if (m instanceof TextMessage) {
+                TextMessage msg = (TextMessage)m;
+                if (msg.getTime() < checkUntilTime) {
+                    break;
+                }
+                String text = StringUtil.prepareForSimilarityComparison(msg.text);
+                if (StringUtil.checkSimilarity(compareMsg, text, minSimilarity)) {
+                    result++;
+                }
+            }
+        }
+        return result;
     }
     
     public synchronized TextMessage getMessage(String msgId) {
@@ -1189,6 +1209,9 @@ public class User implements Comparable<User> {
     
     public static class ModAction extends Message {
 
+        /**
+         * For display, may be formatted differently depending on the command.
+         */
         public final String commandAndParameters;
         
         public ModAction(long time, String commandAndParameters) {
