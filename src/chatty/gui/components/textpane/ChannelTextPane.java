@@ -33,6 +33,7 @@ import chatty.util.api.CheerEmoticon;
 import chatty.util.api.Emoticon;
 import chatty.util.api.Emoticon.EmoticonImage;
 import chatty.util.api.Emoticon.EmoticonUser;
+import chatty.util.api.Emoticon.ImageType;
 import chatty.util.api.Emoticons;
 import chatty.util.api.Emoticons.TagEmotes;
 import chatty.util.api.pubsub.ModeratorActionData;
@@ -167,7 +168,8 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
         ACTION_COLORED, LINKS_CUSTOM_COLOR, BUFFER_SIZE, AUTO_SCROLL_TIME,
         EMOTICON_MAX_HEIGHT, EMOTICON_SCALE_FACTOR, BOT_BADGE_ENABLED,
         FILTER_COMBINING_CHARACTERS, PAUSE_ON_MOUSEMOVE,
-        PAUSE_ON_MOUSEMOVE_CTRL_REQUIRED, EMOTICONS_SHOW_ANIMATED,
+        PAUSE_ON_MOUSEMOVE_CTRL_REQUIRED, EMOTICONS_BTTV_SHOW_ANIMATED,
+        EMOTICONS_ANIMATED,
         SHOW_TOOLTIPS, SHOW_TOOLTIP_IMAGES, BOTTOM_MARGIN,
         
         DISPLAY_NAMES_MODE,
@@ -2543,24 +2545,22 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
             addTwitchTagsEmoticons(user, emoticonsById, text, ranges, rangesStyle, tagEmotes);
         }
         
+        // All-channels emotes
         if (user.isLocalUser()) {
-            for (String set : main.emoticons.getLocalEmotesets()) {
-                HashSet<Emoticon> emoticons = main.emoticons.getEmoticonsBySet(set);
+            findEmoticons(main.emoticons.getUsableGlobalEmotes(), text, ranges, rangesStyle);
+        }
+        else {
+            if (tagEmotes == null) {
+                Set<Emoticon> emoticons = main.emoticons.getGlobalTwitchEmotes();
                 findEmoticons(emoticons, text, ranges, rangesStyle);
             }
-        }
-        
-        // Global emotes
-        if (tagEmotes == null) {
-            Set<Emoticon> emoticons = main.emoticons.getGlobalTwitchEmotes();
+            Set<Emoticon> emoticons = main.emoticons.getOtherGlobalEmotes();
             findEmoticons(emoticons, text, ranges, rangesStyle);
         }
-        Set<Emoticon> emoticons = main.emoticons.getOtherGlobalEmotes();
-        findEmoticons(emoticons, text, ranges, rangesStyle);
-        
+
         // Channel based (may also have a emoteset restriction)
         HashSet<Emoticon> channelEmotes = main.emoticons.getEmoticonsByStream(user.getStream());
-        findEmoticons(user, channelEmotes, text, ranges, rangesStyle);
+        findEmoticons(user, channelEmotes, text, ranges, rangesStyle, main.emoticons.getAllLocalEmotesets());
         
         // Special Combined Emotes
         CombinedEmotesInfo cei = ChattyMisc.getCombinedEmotesInfo();
@@ -2676,7 +2676,7 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
                          * Add emote from message alone
                          */
                         String code = text.substring(start, end+1);
-                        String url = Emoticon.getTwitchEmoteUrlById(id, 1);
+                        String url = Emoticon.getTwitchEmoteUrlById(id, 1, styles.emoticonImageType());
                         Emoticon.Builder b = new Emoticon.Builder(
                                 Emoticon.Type.TWITCH, code, url);
                         b.setStringId(id);
@@ -2722,7 +2722,7 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
                 continue;
             }
             if (emoticon.isAnimated()
-                    && !styles.isEnabled(Setting.EMOTICONS_SHOW_ANIMATED)) {
+                    && !styles.isEnabled(Setting.EMOTICONS_BTTV_SHOW_ANIMATED)) {
                 continue;
             }
             Matcher m = emoticon.getMatcher(text);
@@ -3594,7 +3594,8 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
             addSetting(Setting.BOT_BADGE_ENABLED, true);
             addSetting(Setting.PAUSE_ON_MOUSEMOVE, true);
             addSetting(Setting.PAUSE_ON_MOUSEMOVE_CTRL_REQUIRED, false);
-            addSetting(Setting.EMOTICONS_SHOW_ANIMATED, false);
+            addSetting(Setting.EMOTICONS_BTTV_SHOW_ANIMATED, false);
+            addSetting(Setting.EMOTICONS_ANIMATED, false);
             addSetting(Setting.SHOW_TOOLTIPS, true);
             addSetting(Setting.SHOW_TOOLTIP_IMAGES, true);
             addSetting(Setting.LINKS_CUSTOM_COLOR, true);
@@ -4034,13 +4035,17 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
             // Does this need any other attributes e.g. standard?
             SimpleAttributeSet emoteStyle = new SimpleAttributeSet();
             EmoticonImage emoteImage = emoticon.getIcon(
-                    emoticonScaleFactor(), emoticonMaxHeight(), ChannelTextPane.this);
+                    emoticonScaleFactor(), emoticonMaxHeight(), emoticonImageType(), ChannelTextPane.this);
             StyleConstants.setIcon(emoteStyle, emoteImage.getImageIcon());
             
             emoteStyle.addAttribute(Attribute.EMOTICON, emoteImage);
             emoteStyle.addAttribute(Attribute.IMAGE_ID, idCounter.getAndIncrement());
             emoteStyle.addAttribute(Attribute.ANIMATED, emoticon.isAnimated());
             return emoteStyle;
+        }
+        
+        public ImageType emoticonImageType() {
+            return Emoticon.makeImageType(isEnabled(Setting.EMOTICONS_ANIMATED));
         }
         
         public SimpleDateFormat timestampFormat() {
