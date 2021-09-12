@@ -41,19 +41,24 @@ public class TokenInfo {
     public final String name;
     public final String userId;
     public final boolean valid;
+    public final String clientId;
     public final Set<String> scopes;
+    public final long expiresIn;
     
     public TokenInfo() {
         valid = false;
         name = null;
         userId = null;
+        clientId = null;
         scopes = new HashSet<>();
+        expiresIn = -1;
     }
     
-    public TokenInfo(String name, String userId, Collection<String> scopes) {
+    public TokenInfo(String name, String userId, String clientId, Collection<String> scopes, long expiresIn) {
         this.name = name;
         this.userId = userId;
         valid = true;
+        this.clientId = clientId;
         /**
          * Accept new chat scopes as well. Adding old "chat_login" scope for
          * them, which is checked for. Kind of a hack, but should work well
@@ -63,6 +68,7 @@ public class TokenInfo {
             scopes.add("chat_login");
         }
         this.scopes = new HashSet<>(scopes);
+        this.expiresIn = expiresIn;
     }
     
     public boolean hasScope(String scope) {
