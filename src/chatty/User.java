@@ -10,6 +10,7 @@ import chatty.gui.components.textpane.ModLogInfo;
 import chatty.util.Debugging;
 import chatty.util.StringUtil;
 import chatty.util.api.pubsub.ModeratorActionData;
+import chatty.util.irc.MsgTags;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -42,6 +43,8 @@ public class User implements Comparable<User> {
         new NamedColor("BlueViolet", 138, 43, 226),
         new NamedColor("SpringGreen", 0, 255, 127)
     };
+    
+    public static volatile int MSG_ID;
     
     private int maxLines = 100;
     
@@ -198,10 +201,10 @@ public class User implements Comparable<User> {
         return twitchBadges != null && twitchBadges.containsKey(id) && twitchBadges.get(id).equals(version);
     }
     
-    public List<Usericon> getBadges(boolean botBadgeEnabled, boolean pointsHl, boolean channelLogo) {
+    public List<Usericon> getBadges(boolean botBadgeEnabled, MsgTags tags, boolean channelLogo) {
         Map<String, String> badges = getTwitchBadges();
         if (iconManager != null) {
-            return iconManager.getBadges(badges, this, botBadgeEnabled, pointsHl, channelLogo);
+            return iconManager.getBadges(badges, this, botBadgeEnabled, tags, channelLogo);
         }
         return null;
     }
@@ -485,8 +488,8 @@ public class User implements Comparable<User> {
         return new ArrayList<>(lines);
     }
     
-    public synchronized int getNumberOfSimilarChatMessages(String compareMsg, long timeframe, float minSimilarity) {
-        compareMsg = StringUtil.prepareForSimilarityComparison(compareMsg);
+    public synchronized int getNumberOfSimilarChatMessages(String compareMsg, int method, long timeframe, float minSimilarity, int minLen, char[] ignoredChars) {
+        compareMsg = StringUtil.prepareForSimilarityComparison(compareMsg, ignoredChars);
         int result = 0;
         long checkUntilTime = System.currentTimeMillis() - timeframe * 1000;
         for (int i=lines.size() - 1; i>=0; i--) {
@@ -496,9 +499,11 @@ public class User implements Comparable<User> {
                 if (msg.getTime() < checkUntilTime) {
                     break;
                 }
-                String text = StringUtil.prepareForSimilarityComparison(msg.text);
-                if (StringUtil.checkSimilarity(compareMsg, text, minSimilarity)) {
-                    result++;
+                if (msg.text.length() >= minLen) {
+                    String text = StringUtil.prepareForSimilarityComparison(msg.text, ignoredChars);
+                    if (StringUtil.checkSimilarity(compareMsg, text, minSimilarity, method) > 0) {
+                        result++;
+                    }
                 }
             }
         }

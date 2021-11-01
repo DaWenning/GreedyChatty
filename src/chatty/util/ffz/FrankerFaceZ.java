@@ -9,6 +9,7 @@ import chatty.util.UrlRequest;
 import chatty.util.api.Emoticon;
 import chatty.util.api.EmoticonUpdate;
 import chatty.util.api.TwitchApi;
+import chatty.util.api.usericons.UsericonFactory;
 import chatty.util.settings.Settings;
 import java.util.*;
 import java.util.logging.Logger;
@@ -252,9 +253,17 @@ public class FrankerFaceZ {
             // If type is ROOM, stream should be available
             emotes = FrankerFaceZParsing.parseRoomEmotes(result, stream);
             addRoomBadgeUsernames(stream, FrankerFaceZParsing.parseRoomBadges(result));
-            Usericon modIcon = FrankerFaceZParsing.parseModIcon(result, stream);
-            if (modIcon != null) {
-                usericons.add(modIcon);
+            String modIconUrl = FrankerFaceZParsing.parseCustomBadge(result, stream, "mod_urls");
+            if (modIconUrl != null) {
+                // With added color
+                usericons.add(UsericonFactory.createTwitchLikeIcon(Usericon.Type.MOD,
+                        stream, modIconUrl, Usericon.SOURCE_FFZ, "Moderator (FFZ)"));
+            }
+            String vipIconUrl = FrankerFaceZParsing.parseCustomBadge(result, stream, "vip_badge");
+            if (vipIconUrl != null) {
+                // Just the badge, with no added color
+                usericons.add(UsericonFactory.createIconFromUrl(Usericon.Type.VIP,
+                        stream, vipIconUrl, Usericon.SOURCE_FFZ, null, "VIP (FFZ)"));
             }
         } else if (type == Type.FEATURE_FRIDAY) {
             emotes = FrankerFaceZParsing.parseSetEmotes(result, Emoticon.SubType.FEATURE_FRIDAY, null);
@@ -271,14 +280,19 @@ public class FrankerFaceZ {
         }
         
         // Package accordingly and send the result to the listener
-        EmoticonUpdate emotesUpdate;
+        EmoticonUpdate.Builder updateBuilder = new EmoticonUpdate.Builder(emotes);
+        updateBuilder.setTypeToRemove(Emoticon.Type.FFZ);
         if (type == Type.FEATURE_FRIDAY) {
-            emotesUpdate = new EmoticonUpdate(emotes, Emoticon.Type.FFZ,
-                     Emoticon.SubType.FEATURE_FRIDAY, null, null);
-        } else {
-            emotesUpdate = new EmoticonUpdate(emotes);
+            updateBuilder.setSubTypeToRemove(Emoticon.SubType.FEATURE_FRIDAY);
         }
-        listener.channelEmoticonsReceived(emotesUpdate);
+        else if (type == Type.ROOM) {
+            updateBuilder.setSubTypeToRemove(Emoticon.SubType.REGULAR);
+            updateBuilder.setRoomToRemove(stream);
+        }
+        else if (type == Type.GLOBAL) {
+            updateBuilder.setSubTypeToRemove(Emoticon.SubType.REGULAR);
+        }
+        listener.channelEmoticonsReceived(updateBuilder.build());
         // Return icons if mod icon was found (will be empty otherwise)
         listener.usericonsReceived(usericons);
     }
@@ -341,11 +355,10 @@ public class FrankerFaceZ {
      * Send a message to the listener to clear all FFZ Feature Friday emotes.
      */
     private void clearFeatureFridayEmotes() {
-        listener.channelEmoticonsReceived(new EmoticonUpdate(null,
-                Emoticon.Type.FFZ,
-                Emoticon.SubType.FEATURE_FRIDAY,
-                null,
-                null));
+        EmoticonUpdate.Builder updateBuilder = new EmoticonUpdate.Builder(null);
+        updateBuilder.setTypeToRemove(Emoticon.Type.FFZ);
+        updateBuilder.setSubTypeToRemove(Emoticon.SubType.FEATURE_FRIDAY);
+        listener.channelEmoticonsReceived(updateBuilder.build());
     }
 
     /**

@@ -167,8 +167,7 @@ public class LivestreamerDialog extends JDialog {
             @Override
             public void actionPerformed(ActionEvent e) {
                 if (e.getSource() == closeButton) {
-                    setVisible(false);
-                    settings.setString("livestreamerQualities", qualities.getSettingValue());
+                    close();
                 } else if (e.getSource() == openStreamButton
                         || e.getSource() == streamInput) {
                     String stream = streamInput.getText();
@@ -215,7 +214,7 @@ public class LivestreamerDialog extends JDialog {
      */
     public void open(String stream, String quality) {
         if (stream != null) {
-            String url = "twitch.tv/" + stream;
+            String url = "https://twitch.tv/" + stream;
             if (!Helper.isValidChannel(stream)) {
                 url = stream;
             }
@@ -241,6 +240,11 @@ public class LivestreamerDialog extends JDialog {
             }
             setVisible(true);
         }
+    }
+    
+    public void close() {
+        dispose();
+        settings.setString("livestreamerQualities", qualities.getSettingValue());
     }
     
     /**
@@ -371,7 +375,7 @@ public class LivestreamerDialog extends JDialog {
                 parseQualities(message);
             }
             if (message.trim().startsWith("Starting player") && autoCloseDialog.isSelected()) {
-                LivestreamerDialog.this.setVisible(false);
+                close();
             }
             
             Document doc = messages.getDocument();

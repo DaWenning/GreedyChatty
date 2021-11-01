@@ -9,8 +9,11 @@ import chatty.User;
 import chatty.util.Debugging;
 import chatty.util.MiscUtil;
 import chatty.util.Pair;
+import chatty.util.TimeoutPatternMatcher;
 import chatty.util.RepeatMsgHelper;
 import chatty.util.StringUtil;
+import chatty.util.api.StreamInfo;
+import chatty.util.api.TwitchApi;
 import chatty.util.api.usericons.BadgeType;
 import chatty.util.commands.CustomCommand;
 import chatty.util.commands.Parameters;
@@ -18,6 +21,7 @@ import chatty.util.irc.MsgTags;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -25,6 +29,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -54,10 +59,12 @@ public class Highlighter {
     private final List<HighlightItem> blacklistItems = new ArrayList<>();
     private HighlightItem usernameItem;
     private HighlightItem lastMatchItem;
+    private List<HighlightItem> lastMatchItems;
     private Color lastMatchColor;
     private Color lastMatchBackgroundColor;
     private boolean lastMatchNoNotification;
     private boolean lastMatchNoSound;
+    private boolean includeAllTextMatches;
     private List<Match> lastTextMatches;
     private String lastReplacement;
     
@@ -127,8 +134,16 @@ public class Highlighter {
         this.highlightNextMessages = highlight;
     }
     
+    public void setIncludeAllTextMatches(boolean all) {
+        this.includeAllTextMatches = all;
+    }
+    
     public HighlightItem getLastMatchItem() {
         return lastMatchItem;
+    }
+    
+    public List<HighlightItem> getLastMatchItems() {
+        return lastMatchItems;
     }
     
     /**
@@ -241,12 +256,37 @@ public class Highlighter {
         }
         
         // Then try to match against the items
+        boolean alreadyMatched = false;
         for (HighlightItem item : items) {
             if (item.matches(type, text, blacklist, channel, ab, user, localUser, tags)) {
-                fillLastMatchVariables(item, text);
-                addMatch(user, item);
-                return true;
+                if (!alreadyMatched) {
+                    // Only for the first match
+                    fillLastMatchVariables(item, text);
+                    addMatch(user, item);
+                    alreadyMatched = true;
+                }
+                else if (includeAllTextMatches) {
+                    List<Match> matches = item.getTextMatches(text);
+                    if (lastTextMatches == null && matches != null) {
+                        // Can happen if first match has no pattern
+                        lastTextMatches = new ArrayList<>();
+                    }
+                    if (Match.addAllIfNotAlreadyMatched(lastTextMatches, matches)) {
+                        lastMatchItems.add(item);
+                    }
+                }
+                if (!includeAllTextMatches) {
+                    // Finish here if not all text matches should be included
+                    return true;
+                }
             }
+        }
+        if (alreadyMatched) {
+            // Only applies if all text matches should be included
+            if (lastTextMatches != null) {
+                Collections.sort(lastTextMatches);
+            }
+            return true;
         }
         
         // Then see if there is a recent match ("Highlight follow-up")
@@ -259,6 +299,8 @@ public class Highlighter {
     
     private void fillLastMatchVariables(HighlightItem item, String text) {
         lastMatchItem = item;
+        lastMatchItems = new ArrayList<>();
+        lastMatchItems.add(item);
         lastMatchColor = item.getColor();
         lastMatchBackgroundColor = item.getBackgroundColor();
         lastMatchNoNotification = item.noNotification();
@@ -276,6 +318,7 @@ public class Highlighter {
      */
     public void resetLastMatchVariables() {
         lastMatchItem = null;
+        lastMatchItems = null;
         lastMatchColor = null;
         lastMatchBackgroundColor = null;
         lastMatchNoNotification = false;
@@ -439,6 +482,7 @@ public class Highlighter {
         };
         
         private static Map<String, CustomCommand> globalPresets;
+        private static TwitchApi api;
         
         //==========================
         // Properties
@@ -478,8 +522,9 @@ public class Highlighter {
         private boolean invalidRegexLog;
         private String mainPrefix;
         private String error;
+        private String matchingError;
         private boolean patternWarning;
-        private List<Pair<String, String>> modifications = new ArrayList<>();
+        private List<Modification> modifications = new ArrayList<>();
         
         //==========================
         // State (per match)
@@ -542,6 +587,14 @@ public class Highlighter {
             return HighlightItem.globalPresets;
         }
         
+        public static synchronized void setTwitchApi(TwitchApi api) {
+            HighlightItem.api = api;
+        }
+        
+        public static synchronized TwitchApi getTwitchApi(TwitchApi api) {
+            return HighlightItem.api;
+        }
+        
         /**
          * Create a new item to match messages against.
          * 
@@ -567,7 +620,7 @@ public class Highlighter {
                     item = item.trim();
                     Parameters parameters = Parameters.create(item);
                     String newItem = ccf.replace(parameters);
-                    modifications.add(new Pair<>(item, newItem));
+                    modifications.add(new Modification(item, newItem, ccf.getName()));
                     item = newItem;
                 }
             }
@@ -808,6 +861,9 @@ public class Highlighter {
                                 }
                             });
                         }
+                        else if (part.startsWith("live") || part.startsWith("!live")) {
+                            parseLive(part);
+                        }
                         else if (part.equals("hl")) {
                             addTagsItem("Highlighted by channel points", null, t -> {
                                 return t.isHighlightedMessage();
@@ -875,7 +931,7 @@ public class Highlighter {
                     else {
                         if (applyPresets) {
                             String newItem = applyCustomCommandFunction(split[0], split[1]);
-                            modifications.add(new Pair<>(item, newItem));
+                            modifications.add(new Modification(item, newItem, "ccf:"));
                             prepare(newItem);
                         }
                         else {
@@ -917,7 +973,7 @@ public class Highlighter {
                         }
                     }
                     String newItem = StringUtil.append(result, " ", remaining);
-                    modifications.add(new Pair(item, newItem));
+                    modifications.add(new Modification(item, newItem, "preset:"));
                     prepare(newItem);
                 }
                 else if (item.startsWith("n:")) {
@@ -931,6 +987,62 @@ public class Highlighter {
                     pattern = compilePattern("(?iu)" + Pattern.quote(item));
                 }
             }
+        }
+        
+        /**
+         * Parse the config:live prefix.
+         * 
+         * @param part 
+         */
+        private void parseLive(String part) {
+            // Handle config:!live (negated)
+            boolean successResult = !part.startsWith("!");
+            if (part.startsWith("!")) {
+                part = part.substring(1);
+            }
+            
+            // Optional parameters
+            Pattern titlePattern = null;
+            Pattern categoryPattern = null;
+            if (part.length() > "live".length()) {
+                int paramStart = part.indexOf("|");
+                if (paramStart != -1) {
+                    String param = part.substring(paramStart + 1);
+                    String[] split = param.split("/", 2);
+                    if (split.length == 2) {
+                        titlePattern = compilePattern(split[0]);
+                        categoryPattern = compilePattern(split[1]);
+                    }
+                    if (split.length == 1) {
+                        titlePattern = compilePattern(split[0]);
+                    }
+                }
+            }
+            
+            Pattern titlePattern2 = titlePattern;
+            Pattern categoryPattern2 = categoryPattern;
+            matchItems.add(new Item((!successResult ? "Not: " : "") + "Stream is live (Title:" + titlePattern + "/Game:" + categoryPattern + ")", null, false) {
+
+                @Override
+                public boolean matches(String text, Blacklist blacklist, String channel, Addressbook ab, User user, User localUser, MsgTags tags) {
+                    if (api != null && !StringUtil.isNullOrEmpty(channel)) {
+                        StreamInfo info = api.getCachedStreamInfo(Helper.toStream(channel));
+                        if (info != null && info.isValid() && info.getOnline()) {
+                            // Optional parameters
+                            if (titlePattern2 != null && !titlePattern2.matcher(info.getStatus()).find()) {
+                                return !successResult;
+                            }
+                            if (categoryPattern2 != null && !categoryPattern2.matcher(info.getGame()).find()) {
+                                return !successResult;
+                            }
+                            // If it got to this part, it matches
+                            return successResult;
+                        }
+                        return !successResult;
+                    }
+                    return false;
+                }
+            });
         }
         
         /**
@@ -1133,7 +1245,7 @@ public class Highlighter {
                     pattern = NO_MATCH;
                 }
                 else {
-                    modifications.add(new Pair<>(commandText, result));
+                    modifications.add(new Modification(commandText, result, "cc:"));
                     prepare(result);
                 }
             }
@@ -1284,7 +1396,7 @@ public class Highlighter {
                 return true;
             }
             try {
-                Matcher m = pattern.matcher(text);
+                Matcher m = TimeoutPatternMatcher.create(pattern, text, 100);
                 while (m.find()) {
                     boolean notBlacklisted = blacklist == null || !blacklist.isBlacklisted(m.start(), m.end());
                     if (notBlacklisted) {
@@ -1326,22 +1438,34 @@ public class Highlighter {
                  * 
                  * Example for problematic item: "reg:(?i)(.)\1{2,}"
                  */
-                if (Debugging.millisecondsElapsed("HighlighterRegexError", 5000)) {
+                if (Debugging.millisecondsElapsedLenient(LOG_MATCHING_ERROR_KEY, LOG_MATCHING_ERROR_DELAY)) {
                     /**
                      * Some delay to not spam too much as well as preventing
                      * possible infinite loop (since this outputs an info
                      * message which would in turn trigger an error again,
                      * however unlikely).
                      */
-                    LOGGER.log(Logging.USERINFO,
-                            String.format("Error: Regex '%s' failed with %s",
-                                    pattern, ex));
-                    LOGGER.warning(
-                        String.format("Error: Regex '%s' failed on '%s' with %s",
-                        pattern, text, Debugging.getStacktrace(ex)));
+                    logRegexError(pattern, text, ex);
                 }
+                matchingError = ex.getLocalizedMessage();
             }
             return false;
+        }
+        
+        private static final String LOG_MATCHING_ERROR_KEY = "HighlighterRegexError";
+        private static final long LOG_MATCHING_ERROR_DELAY = TimeUnit.SECONDS.toMillis(120);
+        
+        private void logRegexError(Pattern pattern, String text, Exception ex) {
+            LOGGER.log(Logging.USERINFO,
+                    String.format("Error: Regex match failed (see 'Extra - Debug window' for details)",
+                            usedForFeature, StringUtil.shortenTo(pattern.pattern(), 40)));
+            LOGGER.warning(
+                    String.format("Regex match failed (%s/'%s'):\n\t"
+                            + "regex '%s'\n\t"
+                            + "on text '%s'\n\t"
+                            + "with error '%s'\n\t"
+                            + "(Note that this type of error is logged no more often than every %s seconds.)",
+                            usedForFeature, raw, pattern, text, Debugging.getStacktraceFilteredFlat(ex), LOG_MATCHING_ERROR_DELAY / 1000));
         }
         
         /**
@@ -1357,7 +1481,7 @@ public class Highlighter {
             }
             List<Match> result = new ArrayList<>();
             try {
-                Matcher m = pattern.matcher(text);
+                Matcher m = TimeoutPatternMatcher.create(pattern, text, 100);
                 while (m.find()) {
                     /**
                      * Filter "reg:.*" (or probably similiar) would show empty
@@ -1373,14 +1497,10 @@ public class Highlighter {
                 }
             } catch (Exception ex) {
                 // See matchesPattern() for explanation
-                if (Debugging.millisecondsElapsed("HighlighterRegexError", 5000)) {
-                    LOGGER.log(Logging.USERINFO,
-                            String.format("Error: Regex '%s' failed with %s",
-                                    pattern, ex));
-                    LOGGER.warning(
-                        String.format("Error: Regex '%s' failed on '%s' with %s",
-                        pattern, text, Debugging.getStacktrace(ex)));
+                if (Debugging.millisecondsElapsedLenient(LOG_MATCHING_ERROR_KEY, LOG_MATCHING_ERROR_DELAY)) {
+                    logRegexError(pattern, text, ex);
                 }
+                matchingError = ex.getLocalizedMessage();
             }
             return result;
         }
@@ -1448,9 +1568,9 @@ public class Highlighter {
                     result.append("Shortened.. too many modifications.\n\n");
                     break;
                 }
-                Pair<String, String> p = modifications.get(i);
-                result.append("   ").append(p.key).append("\n");
-                result.append("-> ").append(p.value).append("\n\n");
+                Modification p = modifications.get(i);
+                result.append(String.join("", Collections.nCopies(p.source.length()+3, " "))).append(p.from).append("\n");
+                result.append("[").append(p.source).append("] ").append(p.to).append("\n\n");
             }
             result.append("Applies to: ").append(appliesToType.description).append("\n");
             if (pattern != null) {
@@ -1505,6 +1625,10 @@ public class Highlighter {
             return matches(Type.ANY, "", null, null, null, user, null, MsgTags.EMPTY);
         }
         
+        public boolean matches(User user, MsgTags tags) {
+            return matches(Type.ANY, "", null, null, null, user, null, tags);
+        }
+        
         /**
          * Check whether a message matches this item.
          * 
@@ -1532,6 +1656,7 @@ public class Highlighter {
             failedItem = null;
             blacklistPreventedTextMatch = false;
             blockedByBlacklist = false;
+            matchingError = null;
             
             if (blacklist != null && blacklist.block) {
                 // This would only happen when using item individually, e.g. testing
@@ -1700,8 +1825,26 @@ public class Highlighter {
             return error != null;
         }
         
+        /**
+         * An error that occured while parsing.
+         * 
+         * @return 
+         */
         public String getError() {
             return error;
+        }
+        
+        public boolean hasMatchingError() {
+            return matchingError != null;
+        }
+        
+        /**
+         * The latest error that occured when matching. Reset with every match.
+         * 
+         * @return 
+         */
+        public String getMatchingError() {
+            return matchingError;
         }
         
         public String getReplacement() {
@@ -1826,7 +1969,7 @@ public class Highlighter {
 
     }
     
-    public static class Match {
+    public static class Match implements Comparable<Match> {
 
         public final int start;
         public final int end;
@@ -1869,7 +2012,60 @@ public class Highlighter {
             }
             return result;
         }
+        
+        /**
+         * Add all the newEntries to currentEntries, except for entries that
+         * won't add any matched areas.
+         * 
+         * @param currentEntries
+         * @param newEntries
+         * @return true if anything has been added, false otherwise
+         */
+        public static boolean addAllIfNotAlreadyMatched(List<Match> currentEntries, List<Match> newEntries) {
+            if (currentEntries == null || newEntries == null) {
+                return false;
+            }
+            boolean anyAdded = false;
+            for (Match newEntry : newEntries) {
+                boolean alreadyMatched = false;
+                for (Match currentEntry : currentEntries) {
+                    if (currentEntry.spans(newEntry.start, newEntry.end)) {
+                        alreadyMatched = true;
+                        break;
+                    }
+                }
+                if (!alreadyMatched) {
+                    anyAdded = true;
+                    currentEntries.add(newEntry);
+                }
+            }
+            return anyAdded;
+        }
 
+        /**
+         * Entries with smaller start index first.
+         * 
+         * @param o
+         * @return 
+         */
+        @Override
+        public int compareTo(Match o) {
+            return start - o.start;
+        }
+
+    }
+
+    private static class Modification {
+
+        public final String from;
+        public final String to;
+        public final String source;
+        
+        public Modification(String from, String to, String source) {
+            this.from = from;
+            this.to = to;
+            this.source = source;
+        }
     }
     
 }

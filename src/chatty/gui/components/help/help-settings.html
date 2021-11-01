@@ -73,6 +73,8 @@
             Channel Favorites/History dialog.</dd>
     </dl>
     
+    <div class="moreInfo">More information: <a href="help.html#layouts">Layouts and Tabs</a></div>
+    
     <h3>Directory</h3>
     <div class="moreInfo">More information: <a href="help-guide_folders.html">Settings and other files</a></div>
     
@@ -254,7 +256,11 @@
             <ul>
                 <li>Just the username (e.g. <code>serenity</code>)</li>
                 <li>An addressbook category (e.g. <code>$cat:vip</code>, which would refer to
-        the category <code>vip</code>)</li>
+                    the category <code>vip</code>)</li>
+                <li>User-related <a href="#Highlight_Meta_Matching">Highlight Matching</a>
+                    prefixes (e.g. <code>$m:status:r</code>, where <code>status:r</code>
+                    is the Highlight Matching prefix, or <code>$m:config:t|first-msg=1</code>
+                    to match message tags, some of which are also user-related)</li>
                 <li>Most other <a href="#Usercolors">Usercolors</a> restrictions</li>
             </ul>
         </dd>
@@ -710,10 +716,9 @@
         can be used in e.g. the Highlight list, Message Colors list or to restrict a Notification to trigger only on repeated messages.</p>
     
     <p>Restricting detection uses <a href="#Highlight">Highlight Matching</a>,
-        so <code>!status:M</code> can be used to exclude mods, but a lot more
-        could be used, for example <code>mystatus:M</code> to restrict to
-        channels you are a mod in or <code>reg:.{10,}</code> to only check
-        for messages at least 10 characters long.</p>
+        for example <code>!status:M</code> to exclude mods or <code>mystatus:M</code>
+        to restrict to channels you are a mod in or even matching on the message
+        text.</p>
     
     <p>Note that this feature may affect performance in very busy chats, since each
         received message has to be compared against multiple messages (depending
@@ -992,6 +997,13 @@
                     regex matching on the value.</li>
                 <li><code>config:url</code> - Message must contain a URL (same
                     as what is made clickable)</li>
+                <li><code>config:live</code> or <code>config:live|title/game</code> -
+                    Stream must be live, title and game are interpreted as regex
+                    (like the <code>reg:</code> prefix) and match on the stream's
+                    title or game, use <code>!live</code> to negate match<br />
+                    Example: <code>config:live|/"Grand Theft Auto"</code> would match
+                    in any channel with a live stream where <code>Grand Theft Auto</code>
+                    occurs in the currently streamed game/category</li>
             </ul>
         </li>
         <li><a name="Highlight_Prefix-blacklist"><code>blacklist:</code></a> to specify one or more text patterns
@@ -1553,6 +1565,8 @@
         <a name="Tabs">Tabs</a>
         <a href="#top" class="top">[back to menu]</a>
     </h2>
+    <div class="moreInfo">See also: <a href="help.html#layouts">Layouts and Tabs</a></div>
+    
     <dl class="dl-settings">
         <dt>Tab Order</dt>
         <dd>Whether to show tabs in the order they were opened or alphabetically.</dd>
@@ -1649,8 +1663,9 @@
     
     <h3>Event settings (Notification/Sound)</h3>
     <dl class="dl-settings">
-        <dt>Channel</dt>
-        <dd>Name of the channel this item should be restricted to.</dd>
+        <dt>Channels</dt>
+        <dd>Name of the channel or channels (comma-separated) this item should be
+            restricted to.</dd>
         
         <dt>Match</dt>
         <dd>Match the given text or message, in the same format as for
@@ -1782,11 +1797,18 @@
         <a name="Other">Other</a>
         <a href="#top" class="top">[back to menu]</a>
     </h2>
+    <h3>Graphic Settings</h3>
+    <p>More information about <a href="help-troubleshooting.html#visual-glitches">Graphics Glitches</a>
+        and <a href="help-troubleshooting.html#scaling">UI Scaling</a>.</p>
+    
+    <h3>Updates</h3>
+    <dl class="dl-settings">
+        <dt>Automatically check for new version</dt>
+        <dd>Checks for new versions every few days and outputs a message about it.</dd>
+    </dl>
+    
     <h3>Other</h3>
     <dl class="dl-settings">
-        <dt>Inform me about new versions</dt>
-        <dd>Checks for new versions every few days and outputs a message about it.</dd>
-        
         <dt>Auto-Unhost when your stream goes live</dt>
         <dd>Automatically
             sends the <code>/unhost</code> command to your channel if you started

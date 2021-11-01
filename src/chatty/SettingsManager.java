@@ -125,6 +125,7 @@ public class SettingsManager {
         settings.addString("updateAvailable", "");
         settings.addBoolean("checkNewVersion", true);
         settings.addBoolean("checkNewBeta", false);
+        settings.addBoolean("updateJar", false);
         settings.addBoolean("newsAutoRequest", true);
         settings.addLong("newsLastRead", 0);
         settings.addString("currentVersion", "");
@@ -247,6 +248,7 @@ public class SettingsManager {
         settings.addBoolean("ffzModIcon", true);
         settings.addBoolean("bttvEmotes", true);
         settings.addBoolean("showAnimatedEmotes", true);
+        settings.addBoolean("animatedEmotes", true);
         settings.addList("ignoredEmotes", new ArrayList(), Setting.STRING);
         settings.addList("favoriteEmotes", new ArrayList(), Setting.LIST);
         
@@ -348,6 +350,7 @@ public class SettingsManager {
         settings.addBoolean("reuseUserDialog", false);
         settings.addString("userDialogTimestamp", "[HH:mm:ss]");
         settings.addLong("clearUserMessages", 12);
+        settings.addLong("userMessagesHighlight", 15);
         settings.addMap("userNotes", new HashMap(), Setting.STRING);
         settings.addMap("userNotesChat", new HashMap(), Setting.STRING);
         settings.addLong("userDialogMessageLimit", 100);
@@ -372,6 +375,8 @@ public class SettingsManager {
 
         // Game Presets
         settings.addList("gamesFavorites",new ArrayList(), Setting.STRING);
+        // New format for saving id and name
+        settings.addList("gamesFavorites2", new ArrayList(), Setting.LIST);
         
         // Tags Presets
         settings.addMap("tagsFavorites", new HashMap(), Setting.STRING);
@@ -404,6 +409,7 @@ public class SettingsManager {
         settings.addBoolean("maximized", false);
         settings.addBoolean("nod3d", true);
         settings.addBoolean("noddraw", false);
+        settings.addLong("uiScale", 0);
         settings.addBoolean("bufferStrategy1", false);
         settings.addBoolean("mainResizable", true);
         settings.addBoolean("splash", true);
@@ -423,7 +429,9 @@ public class SettingsManager {
         settings.addBoolean("restoreOnlyIfOnScreen", true);
         settings.addMap("dock", new HashMap<>(), Setting.LONG);
         settings.addMap("layouts", new HashMap<>(), Setting.LIST);
+        settings.addLong("layoutsOptions", 3);
         settings.addBoolean("restoreLayout", true);
+        settings.addBoolean("restoreLayoutWhisper", false);
 
         // Popouts
         settings.addBoolean("popoutSaveAttributes", true);
@@ -590,6 +598,7 @@ public class SettingsManager {
         settings.addList("highlightBlacklist", new ArrayList(), Setting.STRING);
         settings.addBoolean("highlightMatches", true);
         settings.addBoolean("highlightMatchesAll", true);
+        settings.addBoolean("highlightMatchesAllEntries", false);
         settings.addBoolean("highlightByPoints", true);
 
         // Ignore
@@ -620,7 +629,10 @@ public class SettingsManager {
         settings.addBoolean("repeatMsg", false);
         settings.addLong("repeatMsgSim", 80);
         settings.addLong("repeatMsgRep", 2);
+        settings.addLong("repeatMsgLen", 0);
         settings.addLong("repeatMsgTime", 3600);
+        settings.addLong("repeatMsgMethod", 1);
+        settings.addString("repeatMsgIgnored", "");
         settings.addString("repeatMsgMatch", "!status:M");
 
         // Chat Logging

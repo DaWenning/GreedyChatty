@@ -4,6 +4,7 @@ package chatty.gui.components.userinfo;
 import chatty.Helper;
 import chatty.User;
 import chatty.gui.GuiUtil;
+import chatty.gui.MainGui;
 import chatty.gui.components.menus.ContextMenuAdapter;
 import chatty.gui.components.menus.ContextMenuListener;
 import chatty.gui.components.menus.UserContextMenu;
@@ -15,6 +16,7 @@ import chatty.util.StringUtil;
 import chatty.util.api.ChannelInfo;
 import chatty.util.api.Follower;
 import chatty.util.api.TwitchApi;
+import chatty.util.api.UserInfo;
 import chatty.util.commands.CustomCommand;
 import chatty.util.commands.Parameters;
 import chatty.util.settings.Settings;
@@ -26,13 +28,14 @@ import java.awt.event.MouseEvent;
 import java.text.SimpleDateFormat;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
 import javax.swing.*;
 
 /**
  *
  * @author tduva
  */
-public class UserInfo extends JDialog {
+public class UserInfoDialog extends JDialog {
 
     private static final String SINGLE_MESSAGE_CHECK = "Remove only selected message";
 
@@ -41,7 +44,7 @@ public class UserInfo extends JDialog {
     }
     
     private final InfoPanel infoPanel;
-    private final PastMessages pastMessages = new PastMessages();
+    private final PastMessages pastMessages;
 
     private final JButton closeButton = new JButton(Language.getString("dialog.button.close"));
     private final JCheckBox pinnedDialog = new JCheckBox(Language.getString("userDialog.setting.pin"));
@@ -73,7 +76,7 @@ public class UserInfo extends JDialog {
     
     private final Settings settings;
     
-    public UserInfo(final Window parent, UserInfoListener listener,
+    public UserInfoDialog(final Window parent, UserInfoListener listener,
             UserInfoRequester requester,
             Settings settings,
             final ContextMenuListener contextMenuListener) {
@@ -170,6 +173,12 @@ public class UserInfo extends JDialog {
         //==========================
         // Message log
         //==========================
+        if (parent instanceof MainGui) {
+            pastMessages = new PastMessages(((MainGui) parent).repeatMsg, settings);
+        }
+        else {
+            pastMessages = new PastMessages(null, settings);
+        }
         pastMessages.setRows(4);
         pastMessages.setPreferredSize(pastMessages.getPreferredSize());
         JScrollPane scrollPane = new JScrollPane(pastMessages);
@@ -444,8 +453,8 @@ public class UserInfo extends JDialog {
         banReasons.reset();
         singleMessage.setSelected(false);
         setUser(user, msgId, autoModMsgId, localUsername);
-        closeButton.requestFocusInWindow();
         setVisible(true);
+        closeButton.requestFocusInWindow();
     }
     
     /**
@@ -504,17 +513,24 @@ public class UserInfo extends JDialog {
         pinnedDialog.setSelected(isPinned);
     }
 
-    public void setChannelInfo(String stream, ChannelInfo info) {
-        if (currentUser == null || !currentUser.getName().equals(stream)) {
+    public void setUserInfo(UserInfo info) {
+        if (currentUser == null || !currentUser.getName().equals(info.login)) {
             return;
         }
-        infoPanel.setChannelInfo(info);
+        infoPanel.setUserInfo(info);
         updateStuff(currentUser);
     }
     
-    protected ChannelInfo getChannelInfo() {
+    protected UserInfo getUserInfo() {
         if (requester != null) {
-            return requester.getCachedChannelInfo(currentUser.getName(), currentUser.getId());
+            return requester.getCachedUserInfo(currentUser.getName(), info -> {
+                // Can return null in case of request error
+                if (info != null) {
+                    SwingUtilities.invokeLater(() -> {
+                        setUserInfo(info);
+                    });
+                }
+            });
         }
         return null;
     }
