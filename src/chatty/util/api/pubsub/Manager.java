@@ -172,7 +172,14 @@ public class Manager {
     public void unlistenPoints(String username) {
         removeTopic(new Points(username));
     }
-    
+
+
+    public void listenPredictions(String username, String token) {
+        this.token = token;
+        addTopic(new Predictions(username));
+    }
+
+    public void unlistenPredictions(String username) { removeTopic(new Predictions(username));}
     /**
      * Adds the given topic to be requested. If the topic is already being
      * listened to, it will still be added, processed and tried to listen to
@@ -451,6 +458,22 @@ public class Manager {
             return null;
         }
 
+    }
+
+    private class Predictions extends StreamTopic
+    {
+        Predictions(String stream){
+            super(stream);
+        }
+
+        @Override
+        public String make() {
+            String userId = getUserId(stream);
+            if (userId != null) {
+                return "predictions-channel-v1."+userId;
+            }
+            return null;
+        }
     }
     
 }

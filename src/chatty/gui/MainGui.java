@@ -832,6 +832,25 @@ public class MainGui extends JFrame implements Runnable {
                 exit();
             }
         });
+
+        addMenuAction("spelling.reloadLocal", "Reload Local Spelling File", KeyEvent.VK_UNDEFINED, new AbstractAction() {
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                Chatty.getSpellChecker().readSpellingFile();
+                //Chatty.getSpellChecker().getGlobalSpellingFile();
+                MainGui.this.printLine("Spelling File has been reloaded");
+            }
+        });
+        addMenuAction("spelling.reloadAll", "Reload Global and Local Spelling File", KeyEvent.VK_UNDEFINED, new AbstractAction() {
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                Chatty.getSpellChecker().readSpellingFile();
+                Chatty.getSpellChecker().getGlobalSpellingFile();
+                MainGui.this.printLine("Global Spellingrecords have been fetched and local Spelling File has been reloaded");
+            }
+        });
     }
 
     public void showGui() {

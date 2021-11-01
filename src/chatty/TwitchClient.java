@@ -602,6 +602,7 @@ public class TwitchClient {
             pubsub.unlistenModLog(room.getStream());
             pubsub.unlistenUserModeration(room.getStream());
             pubsub.unlistenPoints(room.getStream());
+            pubsub.unlistenPredictions(room.getStream());
         }
     }
     
@@ -2941,6 +2942,11 @@ public class TwitchClient {
                 pubsub.listenPoints(user.getStream(), settings.getString("token"));
             }
         }
+
+        private void checkPredictionListen(User user){
+            pubsub.listenPredictions(user.getStream(), settings.getString("token"));
+        }
+
         
         @Override
         public void onChannelJoined(User user) {
@@ -2963,6 +2969,7 @@ public class TwitchClient {
                 frankerFaceZ.joined(stream);
                 checkModLogListen(user);
                 checkPointsListen(user);
+                checkPredictionListen(user);
             }
         }
 
