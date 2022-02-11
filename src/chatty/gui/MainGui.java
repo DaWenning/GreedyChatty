@@ -69,6 +69,7 @@ import chatty.gui.components.userinfo.UserNotes;
 import chatty.gui.notifications.Notification;
 import chatty.gui.notifications.NotificationActionListener;
 import chatty.gui.notifications.NotificationManager;
+import chatty.gui.notifications.NotificationManager.NotificationWindowData;
 import chatty.gui.notifications.NotificationWindowManager;
 import chatty.lang.Language;
 import chatty.util.api.Emoticon.EmoticonImage;
@@ -121,8 +122,10 @@ import org.json.simple.JSONValue;
  * 
  * @author tduva
  */
-public class MainGui extends JFrame implements Runnable {
-
+public class MainGui extends JFrame implements Runnable { 
+    
+    private static final Logger LOGGER = Logger.getLogger(MainGui.class.getName());
+    
     public final Emoticons emoticons = new Emoticons();
 
     // Reference back to the client to give back data etc.
@@ -139,7 +142,6 @@ public class MainGui extends JFrame implements Runnable {
     private UserInfoManager userInfoDialog;
     private About aboutDialog;
     private ChannelInfoDialog channelInfoDialog;
-    private SettingsDialog settingsDialog;
     private AdminDialog adminDialog;
     private FavoritesDialog favoritesDialog;
     private JoinDialog joinDialog;
@@ -147,7 +149,7 @@ public class MainGui extends JFrame implements Runnable {
     private HighlightedMessages ignoredMessages;
     private MainMenu menu;
     private LiveStreamsDialog liveStreamsDialog;
-    private NotificationWindowManager<String> notificationWindowManager;
+    private NotificationWindowManager<NotificationWindowData> notificationWindowManager;
     private NotificationManager notificationManager;
     private ErrorMessage errorMessage;
     private AddressbookDialog addressbookDialog;
@@ -176,6 +178,7 @@ public class MainGui extends JFrame implements Runnable {
     protected DockedDialogManager dockedDialogs;
     private final IgnoredMessages ignoredMessagesHelper = new IgnoredMessages(this);
     public final HotkeyManager hotkeyManager = new HotkeyManager(this);
+    public final LocalEmotesSetting localEmotes;
 
     // Listeners that need to be returned by methods
     private ActionListener actionListener;
@@ -187,6 +190,7 @@ public class MainGui extends JFrame implements Runnable {
     public MainGui(TwitchClient client) {
         this.client = client;
         msgColorManager = new MsgColorManager(client.settings);
+        localEmotes = new LocalEmotesSetting(client.settings, this);
         repeatMsg = new RepeatMsgHelper(client.settings);
         SwingUtilities.invokeLater(this);
     }
@@ -239,7 +243,7 @@ public class MainGui extends JFrame implements Runnable {
         GuiUtil.installEscapeCloseOperation(connectionDialog);
         tokenDialog = new TokenDialog(this);
         tokenGetDialog = new TokenGetDialog(this);
-        userInfoDialog = new UserInfoManager(this, client.settings, contextMenuListener);
+        userInfoDialog = new UserInfoManager(this, client.settings, contextMenuListener, client.api);
         aboutDialog = new About();
         setHelpWindowIcons();
         favoritesDialog = new FavoritesDialog(this, client.channelFavorites, contextMenuListener);
@@ -288,7 +292,7 @@ public class MainGui extends JFrame implements Runnable {
         channelInfoDialog = new ChannelInfoDialog(this, dockedDialogs);
         channelInfoDialog.addContextMenuListener(contextMenuListener);
         adminDialog = new AdminDialog(this, client.api, dockedDialogs);
-        liveStreamsDialog = new LiveStreamsDialog(contextMenuListener, client.channelFavorites, client.settings, dockedDialogs);
+        liveStreamsDialog = new LiveStreamsDialog(this, contextMenuListener, client.channelFavorites, client.settings, dockedDialogs);
         setLiveStreamsWindowIcons();
         
         // Some newer stuff
@@ -312,8 +316,10 @@ public class MainGui extends JFrame implements Runnable {
 
         // this.getContentPane().setBackground(new Color(0,0,0,0));
 
-        getSettingsDialog();
-
+        if (client.settings.getBoolean("initSettingsDialog")) {
+            getSettingsDialog(null);
+        }
+        
         // Main Menu
         MainMenuListener menuListener = new MainMenuListener();
         menu = new MainMenu(menuListener, menuListener);
@@ -332,8 +338,12 @@ public class MainGui extends JFrame implements Runnable {
             client.bttvEmotes.requestEmotes(BTTVEmotes.GLOBAL, false);
         }
         OtherBadges.requestBadges(r -> client.usericonManager.setThirdPartyIcons(r), false);
-        ChattyMisc.request();
-
+        ChattyMisc.request(() -> {
+            SwingUtilities.invokeLater(() -> {
+                updateSmilies();
+            });
+        });
+        
         // Window states
         windowStateManager = new WindowStateManager(this, client.settings);
         windowStateManager.addWindow(this, "main", true, true);
@@ -370,12 +380,9 @@ public class MainGui extends JFrame implements Runnable {
     protected void popoutCreated(Window popout) {
         hotkeyManager.registerPopout(popout);
     }
-
-    private SettingsDialog getSettingsDialog() {
-        if (settingsDialog == null) {
-            settingsDialog = new SettingsDialog(this, client.settings);
-        }
-        return settingsDialog;
+    
+    private void getSettingsDialog(Consumer<SettingsDialog> action) {
+        SettingsDialog.get(this, action);
     }
 
     /**
@@ -1014,6 +1021,8 @@ public class MainGui extends JFrame implements Runnable {
             client.api.checkToken();
         }
         
+        localEmotes.init();
+        emoticons.setLocalEmotes(localEmotes.getData());
         emoticons.setIgnoredEmotes(client.settings.getList("ignoredEmotes"));
         emoticons.loadFavoritesFromSettings(client.settings);
         client.api.getEmotesBySets(emoticons.getFavoritesNonGlobalEmotesets());
@@ -1580,6 +1589,16 @@ public class MainGui extends JFrame implements Runnable {
                         //newsDialog.showDialog();
                     }
                     break;
+                case "settings":
+                    getSettingsDialog(s -> {
+                        if (!s.isVisible()) {
+                            s.showSettings("show", ref);
+                        }
+                        else {
+                            s.showPage(ref);
+                        }
+                    });
+                    break;
             }
         }
     }
@@ -1653,7 +1672,7 @@ public class MainGui extends JFrame implements Runnable {
             } else if (cmd.equals("news")) {
                 // newsDialog.showDialog();
             } else if (cmd.equals("settings")) {
-                getSettingsDialog().showSettings();
+                getSettingsDialog(s -> s.showSettings());
             } else if (cmd.equals("saveSettings")) {
                 int result = JOptionPane.showOptionDialog(MainGui.this,
                         Language.getString("saveSettings.text") + "\n\n"
@@ -1899,13 +1918,13 @@ public class MainGui extends JFrame implements Runnable {
                 client.settings.setBoolean("historyVerticalZoom", selected);
             }
             else if (cmd.startsWith("highlightSource.")) {
-                settingsDialog.showSettings("selectHighlight", JSONValue.parse(cmd.substring("highlightSource.".length())));
+                getSettingsDialog(s -> s.showSettings("selectHighlight", JSONValue.parse(cmd.substring("highlightSource.".length()))));
             }
             else if (cmd.startsWith("ignoreSource.")) {
-                settingsDialog.showSettings("selectIgnore", JSONValue.parse(cmd.substring("ignoreSource.".length())));
+                getSettingsDialog(s -> s.showSettings("selectIgnore", JSONValue.parse(cmd.substring("ignoreSource.".length()))));
             }
             else if (cmd.startsWith("msgColorSource.")) {
-                settingsDialog.showSettings("selectMsgColor", cmd.substring("msgColorSource.".length()));
+                getSettingsDialog(s -> s.showSettings("selectMsgColor", cmd.substring("msgColorSource.".length())));
             }
             else {
                 nameBasedStuff(e, channels.getActiveChannel().getStreamName());
@@ -2048,6 +2067,9 @@ public class MainGui extends JFrame implements Runnable {
             if (cmd.equals("manualRefreshStreams")) {
                 client.api.manualRefreshStreams();
                 state.update(true);
+            }
+            if (cmd.equals("liveStreamsSettings")) {
+                getSettingsDialog(s -> s.showSettings("show", "LIVE_STREAMS"));
             }
             if (cmd.equals("sortOption_favFirst")) {
                 JCheckBoxMenuItem item = (JCheckBoxMenuItem)e.getSource();
@@ -2316,6 +2338,12 @@ public class MainGui extends JFrame implements Runnable {
                 client.settings.listRemove("favoriteEmotes", emote.code);
                 emotesDialog.favoritesUpdated();
             }
+            else if (e.getActionCommand().equals("addCustomLocalEmote")) {
+                localEmotes.add(emote);
+            }
+            else if (e.getActionCommand().equals("removeCustomLocalEmote")) {
+                localEmotes.remove(emote);
+            }
             if (emote.hasStreamSet()) {
                 nameBasedStuff(e, emote.getStream());
             }
@@ -2335,7 +2363,7 @@ public class MainGui extends JFrame implements Runnable {
                 MiscUtil.copyToClipboard(usericon.badgeType.toString());
             }
             else if (e.getActionCommand().startsWith("addUsericonOfBadgeType")) {
-                getSettingsDialog().showSettings(e.getActionCommand(), usericon);
+                getSettingsDialog(s -> s.showSettings(e.getActionCommand(), usericon));
             }
             else if (e.getActionCommand().equals("badgeImage")) {
                 UrlOpener.openUrlPrompt(getActiveWindow(), usericon.url.toString(), true);
@@ -2388,6 +2416,7 @@ public class MainGui extends JFrame implements Runnable {
                     openFollowerDialog();
                 }
             }
+            dockedDialogs.activeContentChanged();
         }
     }
     
@@ -2449,7 +2478,7 @@ public class MainGui extends JFrame implements Runnable {
         
     }
     
-    private class MyNotificationActionListener implements NotificationActionListener<String> {
+    private class MyNotificationActionListener implements NotificationActionListener<NotificationWindowData> {
 
         /**
          * Right-clicked on a notification.
@@ -2457,10 +2486,22 @@ public class MainGui extends JFrame implements Runnable {
          * @param data 
          */
         @Override
-        public void notificationAction(String data) {
+        public void notificationAction(NotificationWindowData data) {
             if (data != null) {
-                makeVisible();
-                client.joinChannel(data);
+                Notification notification = data.notification;
+                String channel = data.channel;
+                if (client.settings.getBoolean("liveStreamsNotificationAction")
+                        && notification != null
+                        && notification.type == Notification.Type.STREAM_STATUS) {
+                    StreamInfo status = client.api.getCachedStreamInfo(Helper.toStream(channel));
+                    if (status != null) {
+                        liveStreamsDialog.handleStreamsAction(Arrays.asList(new StreamInfo[]{status}), true);
+                    }
+                }
+                else {
+                    makeVisible();
+                    client.joinChannel(channel);
+                }
             }
         }
     }
@@ -2510,7 +2551,7 @@ public class MainGui extends JFrame implements Runnable {
      */
     public void addGuiCommands() {
         client.commands.addEdt("settings", p -> {
-            getSettingsDialog().showSettings();
+            getSettingsDialog(s -> s.showSettings());
         });
         client.commands.addEdt("customEmotes", p -> {
             printLine(emoticons.getCustomEmotesInfo());
@@ -3113,15 +3154,15 @@ public class MainGui extends JFrame implements Runnable {
         });
     }
     
-    public void showNotification(String title, String message, Color foreground, Color background, String channel) {
+    public void showNotification(String title, String message, Color foreground, Color background, NotificationWindowData data) {
         long setting = client.settings.getLong("nType");
         if (setting == NotificationSettings.NOTIFICATION_TYPE_CUSTOM) {
-            notificationWindowManager.showMessage(title, message, foreground, background, channel);
+            notificationWindowManager.showMessage(title, message, foreground, background, data);
         } else if (setting == NotificationSettings.NOTIFICATION_TYPE_TRAY) {
             trayIcon.displayInfo(title, message);
         } else if (setting == NotificationSettings.NOTIFICATION_TYPE_COMMAND) {
             GuiUtil.showCommandNotification(client.settings.getString("nCommand"),
-                    title, message, channel);
+                    title, message, data.channel);
         }
         eventLog.add(new chatty.gui.components.eventlog.Event(
                 chatty.gui.components.eventlog.Event.Type.NOTIFICATION,
@@ -3136,7 +3177,7 @@ public class MainGui extends JFrame implements Runnable {
                 if (client.settings.getString("username").equalsIgnoreCase("joshimuz")) {
                     showNotification("[Test] It works!",
                             "Now you have your notifications Josh.. Kappa",
-                            Color.BLACK, Color.WHITE, channel);
+                            Color.BLACK, Color.WHITE, new NotificationWindowData(null, channel));
                 } else if (title != null && text != null) {
                     showNotification(title, text, Color.BLACK, Color.WHITE, null);
                 } else if (StringUtil.isNullOrEmpty(channel)) {
@@ -3146,7 +3187,7 @@ public class MainGui extends JFrame implements Runnable {
                 } else {
                     showNotification("[Status] "+Helper.toValidChannel(channel),
                             "Test Notification (this would pop up when a stream status changes)",
-                            Color.BLACK, Color.WHITE, channel);
+                            Color.BLACK, Color.WHITE, new NotificationWindowData(null, channel));
                 }
             }
         });
@@ -3968,22 +4009,12 @@ public class MainGui extends JFrame implements Runnable {
         });
     }
     
-    public void showSettings() {
-        SwingUtilities.invokeLater(new Runnable() {
-
-            @Override
-            public void run() {
-                getSettingsDialog().showSettings();
-            }
-        });
-    }
-    
     public void setColor(final String item) {
         SwingUtilities.invokeLater(new Runnable() {
 
             @Override
             public void run() {
-                getSettingsDialog().showSettings("editUsercolorItem", item);
+                getSettingsDialog(s -> s.showSettings("editUsercolorItem", item));
             }
         });
     }
@@ -3993,7 +4024,7 @@ public class MainGui extends JFrame implements Runnable {
 
             @Override
             public void run() {
-                getSettingsDialog().showSettings("editCustomNameItem", item);
+                getSettingsDialog(s -> s.showSettings("editCustomNameItem", item));
             }
         });
     }
@@ -4369,7 +4400,7 @@ public class MainGui extends JFrame implements Runnable {
             }
         }
         else if (type.equals("globaltwitch")) {
-            client.emotesetManager.requestUserEmotes();
+            client.api.refreshSets(new HashSet<>(Arrays.asList(new String[]{"0"})));
         }
         else if (type.equals("globalother")) {
             if (client.settings.getBoolean("ffz")) {
@@ -4382,25 +4413,95 @@ public class MainGui extends JFrame implements Runnable {
     }
     
     public void updateEmoticons(final EmoticonUpdate update) {
-        SwingUtilities.invokeLater(new Runnable() {
-
-            @Override
-            public void run() {
-                emoticons.updateEmoticons(update);
+        SwingUtilities.invokeLater(() -> {
+            emoticons.updateEmoticons(update);
+            emotesDialog.update();
+            autoSetSmilies(update);
+        });
+    }
+    
+    private void updateSmilies() {
+        GuiUtil.edt(() -> {
+            Map<String, Set<Emoticon>> smilies = ChattyMisc.getSmilies();
+            if (smilies != null) {
+                switch ((int) client.settings.getLong("smilies")) {
+                    case 1:
+                    case 10:
+                        emoticons.setSmilies(smilies.get("robot"));
+                        break;
+                    case 2:
+                    case 20:
+                        emoticons.setSmilies(smilies.get("glitch"));
+                        break;
+                    case 3:
+                    case 30:
+                        emoticons.setSmilies(smilies.get("monkey"));
+                        break;
+                    default:
+                        emoticons.setSmilies(null);
+                }
                 emotesDialog.update();
             }
         });
     }
     
-    public void addEmoticons(final Set<Emoticon> emotes) {
-        SwingUtilities.invokeLater(new Runnable() {
-
-            @Override
-            public void run() {
-                emoticons.addEmoticons(emotes);
-                emotesDialog.update();
+    /**
+     * The old user emotes API will contain at least most of the smilies the
+     * user has selected in their Twitch settings, so that can be used to set
+     * the setting before the API is removed.
+     * 
+     * Additionally, it can also look for emotesets in new API request results,
+     * although only the set 42 (monkey emotes) appear to actually be in the IRC
+     * emotesets message tag.
+     * 
+     * The smilies in the new API appear to be a bit messy, because instead of
+     * regex (and maybe specifying in an option that it's regex) it has an emote
+     * for several variations (but the same image). Plus the glitch emotes seem
+     * to not be available at all (at least without coding in the emoteset
+     * manually somehow, if it still exists). This is why the smilies are loaded
+     * separately from another API, whereas the "smilies" setting determines
+     * which set is loaded.
+     *
+     * @param update 
+     */
+    private void autoSetSmilies(EmoticonUpdate update) {
+        if (client.settings.getLong("smilies") < 10) {
+            // Manually set to not be automatically changed
+            return;
+        }
+        if (update.setsAdded != null) {
+            // User Emotes request should have setsAdded filled
+            String type = null;
+            for (Emoticon emote : update.emotesToAdd) {
+                type = ChattyMisc.getTypeByEmoteId(emote.stringId);
+                if (type != null) {
+                    LOGGER.info("Set smilies type to "+type+" (by id "+emote.stringId+")");
+                    break;
+                }
             }
-        });
+            if (type == null) {
+                for (String set : update.setsAdded) {
+                    type = ChattyMisc.getTypeByEmoteSet(set);
+                    if (type != null) {
+                        LOGGER.info("Set smilies type to " + type + " (by set " + set + ")");
+                        break;
+                    }
+                }
+            }
+            if (type != null) {
+                switch (type) {
+                    case "robot":
+                        client.settings.setLong("smilies", 10);
+                        break;
+                    case "glitch":
+                        client.settings.setLong("smilies", 20);
+                        break;
+                    case "monkey":
+                        client.settings.setLong("smilies", 30);
+                        break;
+                }
+            }
+        }
     }
     
     public void setCheerEmotes(final Set<CheerEmoticon> emotes) {
@@ -4633,7 +4734,9 @@ public class MainGui extends JFrame implements Runnable {
         adminDialog.updateAccess(
                 scopes.contains(TokenInfo.Scope.EDITOR.scope),
                 scopes.contains(TokenInfo.Scope.EDIT_BROADCAST.scope),
-                scopes.contains(TokenInfo.Scope.COMMERICALS.scope));
+                scopes.contains(TokenInfo.Scope.COMMERICALS.scope),
+                scopes.contains(TokenInfo.Scope.BLOCKED_READ.scope)
+                        && scopes.contains(TokenInfo.Scope.BLOCKED_MANAGE.scope));
         emotesDialog.setUserEmotes(scopes.contains(TokenInfo.Scope.SUBSCRIPTIONS.scope));
     }
     
@@ -4673,6 +4776,7 @@ public class MainGui extends JFrame implements Runnable {
             @Override
             public void run() {
                 followerDialog.setFollowerInfo(info);
+                userInfoDialog.setFollowerInfo(info);
             }
         });
     }
@@ -4701,18 +4805,6 @@ public class MainGui extends JFrame implements Runnable {
         else {
             client.api.putChannelInfoNew(info);
         }
-    }
-    
-    public void getChannelStatus(String channel) {
-        client.api.getChannelStatus(channel);
-    }
-    
-    public UserInfo getCachedUserInfo(String channel, Consumer<UserInfo> result) {
-        return client.api.getCachedUserInfo(channel, result);
-    }
-    
-    public Follower getSingleFollower(String stream, String streamId, String user, String userId, boolean refresh) {
-        return client.api.getSingeFollower(stream, streamId, user, userId, refresh);
     }
 
     public String getActiveStream() {
@@ -4858,9 +4950,13 @@ public class MainGui extends JFrame implements Runnable {
      * was granted.
      */
     private void requestFollowedStreams() {
-        if (client.settings.getBoolean("requestFollowedStreams") &&
-                client.settings.getList("scopes").contains(TokenInfo.Scope.USERINFO.scope)) {
-            client.api.getFollowedStreams(client.settings.getString("token"));
+        if (client.settings.getBoolean("requestFollowedStreams")) {
+            if (client.settings.getList("scopes").contains(TokenInfo.Scope.FOLLOWS.scope)) {
+                client.api.getFollowedStreams(client.settings.getString("token"));
+            }
+            else {
+                EventLog.addSystemEvent("access.follows");
+            }
         }
     }
     
@@ -4981,6 +5077,9 @@ public class MainGui extends JFrame implements Runnable {
                     hotkeyManager.loadFromSettings(client.settings);
                 } else if (setting.equals("streamChatChannels")) {
                     client.updateStreamChatLogos();
+                } else if (setting.equals("localEmotes")) {
+                    emoticons.setLocalEmotes(localEmotes.getData());
+                    emotesDialog.update();
                 }
             }
             if (type == Setting.LONG) {
@@ -4990,6 +5089,8 @@ public class MainGui extends JFrame implements Runnable {
                     streamChat.setMessageTimeout(((Long)value).intValue());
                 } else if (setting.equals("emoteScaleDialog")) {
                     emotesDialog.setEmoteScale(((Long)value).intValue());
+                } else if (setting.equals("smilies")) {
+                    updateSmilies();
                 }
             }
             if (setting.equals("liveStreamsSorting")

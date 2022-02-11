@@ -23,10 +23,13 @@ public class TokenInfo {
         EDITOR("channel_editor", "editor"),
         EDIT_BROADCAST("user:edit:broadcast", "broadcast"),
         COMMERICALS("channel_commercial", "commercials"),
+        FOLLOWS("user:read:follows", "follows"),
         SUBSCRIBERS("channel_subscriptions", "subscribers"),
         SUBSCRIPTIONS("user_subscriptions", "subscriptions"),
         CHAN_MOD("channel:moderate", "chanMod"),
         AUTOMOD("moderator:manage:automod", "automod"),
+        BLOCKED_READ("moderator:read:blocked_terms", "blockedRead"),
+        BLOCKED_MANAGE("moderator:manage:blocked_terms", "blockedManage"),
         POINTS("channel:read:redemptions", "points");
         
         public String scope;

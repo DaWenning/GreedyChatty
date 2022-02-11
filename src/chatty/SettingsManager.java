@@ -251,6 +251,8 @@ public class SettingsManager {
         settings.addBoolean("animatedEmotes", true);
         settings.addList("ignoredEmotes", new ArrayList(), Setting.STRING);
         settings.addList("favoriteEmotes", new ArrayList(), Setting.LIST);
+        settings.addLong("smilies", 10);
+        settings.addList("localEmotes", new ArrayList(), Setting.LIST);
         
         settings.addString("emoji", "twemoji");
         settings.addBoolean("emojiReplace", true);
@@ -432,6 +434,7 @@ public class SettingsManager {
         settings.addLong("layoutsOptions", 3);
         settings.addBoolean("restoreLayout", true);
         settings.addBoolean("restoreLayoutWhisper", false);
+        settings.addBoolean("initSettingsDialog", false);
 
         // Popouts
         settings.addBoolean("popoutSaveAttributes", true);
@@ -459,6 +462,7 @@ public class SettingsManager {
         settings.addString("tabsOpen", "activeChan");
         settings.addBoolean("tabsMwheelScrolling", false);
         settings.addBoolean("tabsMwheelScrollingAnywhere", true);
+        settings.addBoolean("tabsCloseMMB", true);
         settings.addString("tabsPlacement", "top");
         settings.addString("tabsLayout", "wrap");
         settings.addLong("tabsLive", 16);
@@ -483,6 +487,10 @@ public class SettingsManager {
 
         settings.addString("liveStreamsSorting", "recent");
         settings.addBoolean("liveStreamsSortingFav", true);
+        settings.addString("liveStreamsAction", "info");
+        settings.addString("liveStreamsCommand", "");
+        settings.addBoolean("liveStreamsChatIcon", true);
+        settings.addBoolean("liveStreamsNotificationAction", false);
         settings.addLong("historyRange", 0);
         settings.addBoolean("historyVerticalZoom", false);
         
@@ -696,6 +704,7 @@ public class SettingsManager {
         settings.addString("groupChatServer", "");
         settings.addString("groupChatPort", "");
         settings.addBoolean("whisperAutoRespond", false);
+        settings.addString("whisperAutoRespondCustom", "");
         
         // Copy Messages
         settings.addBoolean("cmEnabled", false);
@@ -825,7 +834,7 @@ public class SettingsManager {
                     break;
             }
             if (key.startsWith("set:") && key.length() > 4) {
-                LOGGER.info("Setting commandline setting: "+settings.setTextual(key.substring(4)+" "+value));
+                LOGGER.info("Setting commandline setting: "+settings.setTextual(key.substring(4)+" "+value, true));
             }
         }
     }
@@ -948,6 +957,12 @@ public class SettingsManager {
         
         if (switchedFromVersionBefore("0.9.7-b4")) {
             settings.setLong("mentionsInfo", settings.getLong("mentions"));
+        }
+        if (switchedFromVersionBefore("0.16")) {
+            // Y is "Week year", which may not be what is expected sometimes
+            for (String setting : new String[]{"timestamp", "logTimestamp", "userDialogTimestamp"}) {
+                settings.setString(setting, settings.getString(setting).replace("Y", "y"));
+            }
         }
         
         overrideHotkeySettings();
