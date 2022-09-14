@@ -229,10 +229,15 @@ public class StyleManager implements StyleServer {
         addLongSetting(Setting.MENTION_MESSAGES, "mentionMessages");
         // Deleted Messages Settings
         String deletedMessagesMode = settings.getString("deletedMessagesMode");
-        long deletedMessagesModeNumeric = 0;
+        long deletedMessagesModeNumeric = 0; // keep
         if (deletedMessagesMode.equals("delete")) {
             deletedMessagesModeNumeric = -1;
-        } else if (deletedMessagesMode.equals("keepShortened")) {
+        }
+        else if (deletedMessagesMode.equals("nothing"))
+        {
+            deletedMessagesModeNumeric = -2;            
+        }    
+        else if (deletedMessagesMode.equals("keepShortened")) {
             deletedMessagesModeNumeric = settings.getLong("deletedMessagesMaxLength");
         }
         other.addAttribute(Setting.DELETED_MESSAGES_MODE, deletedMessagesModeNumeric);

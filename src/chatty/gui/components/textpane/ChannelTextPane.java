@@ -1108,7 +1108,7 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
          * value < 0 means delete message
          */
         int mode = styles.getInt(Setting.DELETED_MESSAGES_MODE);
-        boolean delete = mode < DELETED_MESSAGES_KEEP;
+        
         
         boolean first = true;
         for (Userline l : getUserLines(user)) {
@@ -1117,9 +1117,13 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
             boolean isUserMessage = Util.hasAttributeKeyValue(l.userElement, Attribute.IS_USER_MESSAGE, true);
 
             if (msgIdMatches && (isAutoModMessage || isUserMessage)) {
-                if (delete) {
+                if (mode == -1) {
                     deleteMessage(l.line);
-                } else {
+                } else if (mode == -2) 
+                {
+                    markMessageAsDeleted(l.line);
+                }
+                else {
                     strikeThroughMessage(l.line, mode);
                 }
                 if (first) {
@@ -1335,6 +1339,15 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
                 LOGGER.warning("Bad location: "+msgStart+"-"+msgEnd+" "+ex.getLocalizedMessage());
             }
         }
+    }
+
+    private void markMessageAsDeleted(Element elementToRemove) {
+        if (isLineDeleted(elementToRemove)) {
+            //System.out.println(line+"already deleted");
+            return;
+        }
+        int lineStart = elementToRemove.getStartOffset();
+        setLineDeleted(lineStart);
     }
     
     /**
@@ -3619,7 +3632,7 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
             addSetting(Setting.HIGHLIGHT_MATCHES_ALL, true);
             addNumericSetting(Setting.USERCOLOR_BACKGROUND, 1, 0, 200);
             addNumericSetting(Setting.FILTER_COMBINING_CHARACTERS, 1, 0, 2);
-            addNumericSetting(Setting.DELETED_MESSAGES_MODE, 30, -1, 9999999);
+            addNumericSetting(Setting.DELETED_MESSAGES_MODE, 30, -2, 9999999);
             addNumericSetting(Setting.BUFFER_SIZE, 250, BUFFER_SIZE_MIN, BUFFER_SIZE_MAX);
             addNumericSetting(Setting.AUTO_SCROLL_TIME, 30, 5, 1234);
             addNumericSetting(Setting.EMOTICON_MAX_HEIGHT, 200, 0, 300);

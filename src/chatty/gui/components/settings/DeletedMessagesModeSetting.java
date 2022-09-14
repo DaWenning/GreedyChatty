@@ -17,6 +17,7 @@ import javax.swing.JPanel;
  */
 public class DeletedMessagesModeSetting extends JPanel {
 
+    private static final String OPTION_NOTHING = "-";
     private static final String OPTION_DELETE = Language.getString("settings.option.deletedMessagesMode.delete");
     private static final String OPTION_STRIKE_THROUGH = Language.getString("settings.option.deletedMessagesMode.strikeThrough");
     private static final String OPTION_STRIKE_THROUGH_SHORTEN = Language.getString("settings.option.deletedMessagesMode.strikeThroughShorten");
@@ -28,6 +29,7 @@ public class DeletedMessagesModeSetting extends JPanel {
 
     public DeletedMessagesModeSetting(SettingsDialog d) {
         Map<String,String> options = new LinkedHashMap<>();
+        options.put("nothing", OPTION_NOTHING);
         options.put("delete", OPTION_DELETE);
         options.put("keep", OPTION_STRIKE_THROUGH);
         options.put("keepShortened", OPTION_STRIKE_THROUGH_SHORTEN);

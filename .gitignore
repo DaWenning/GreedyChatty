@@ -11,3 +11,4 @@ META-INF/
 .nb-gradle
 build.xml
 mergeMaster.sh
+bin/*
