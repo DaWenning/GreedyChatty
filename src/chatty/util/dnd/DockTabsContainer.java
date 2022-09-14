@@ -4,7 +4,9 @@ package chatty.util.dnd;
 import chatty.util.dnd.DockDropInfo.DropType;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.KeyboardFocusManager;
 import java.util.Arrays;
 import java.util.List;
 import javax.swing.BorderFactory;
@@ -153,9 +155,21 @@ public class DockTabsContainer extends JPanel implements DockChild {
             // Already in tabs mode
             return;
         }
+        Component focusedComp = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
         remove(singleContent.getComponent());
         add(tabs, BorderLayout.CENTER);
         tabs.addContent(singleContent);
+        if (focusedComp != null) {
+            /**
+             * Even if getFocusOwner() still returns the correct component, the
+             * focus doesn't seems to necessarily be there. Request focus again
+             * explicitly to reset focus when switching to tabs, e.g. when a
+             * whisper tab opens in the background while typing in a channel the
+             * focus would get stolen away. Since it's an action without user
+             * interaction this should at least be worked around a bit.
+             */
+            focusedComp.requestFocusInWindow();
+        }
         singleContent = null;
     }
 
@@ -348,13 +362,13 @@ public class DockTabsContainer extends JPanel implements DockChild {
 
     @Override
     public DockPath buildPath(DockPath path, DockChild child) {
-        DockContent content = path.getContent();
-        if (content != null) {
-            if (singleContent == content) {
+        String contentId = path.getContentId();
+        if (contentId != null) {
+            if (singleContent != null && singleContent.getId().equals(contentId)) {
                 path.addParent(DockPathEntry.createTab(0));
             }
             else {
-                path.addParent(DockPathEntry.createTab(tabs.getIndexByContent(content)));
+                path.addParent(DockPathEntry.createTab(tabs.getIndexByContentId(contentId)));
             }
         }
         return parent.buildPath(path, this);
@@ -362,7 +376,8 @@ public class DockTabsContainer extends JPanel implements DockChild {
 
     @Override
     public DockLayoutElement getLayoutElement() {
-        return new DockLayoutTabs(DockUtil.getContentIds(getContents()));
+        DockContent active = getCurrentContent();
+        return new DockLayoutTabs(DockUtil.getContentIds(getContents()), active != null ? active.getId() : null);
     }
 
     @Override

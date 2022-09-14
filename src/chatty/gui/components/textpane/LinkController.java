@@ -29,9 +29,9 @@ import chatty.util.StringUtil;
 import chatty.util.TwitchEmotesApi;
 import chatty.util.TwitchEmotesApi.EmotesetInfo;
 import chatty.util.api.Emoticon;
-import chatty.util.api.Emoticon.EmoticonImage;
-import chatty.util.api.Emoticon.ImageType;
 import chatty.util.api.Emoticons;
+import chatty.util.api.CachedImage;
+import chatty.util.api.CachedImage.ImageType;
 import chatty.util.api.usericons.Usericon;
 import java.awt.Color;
 import java.awt.Component;
@@ -203,8 +203,8 @@ public class LinkController extends MouseAdapter {
         String url;
         String link;
         User user;
-        EmoticonImage emoteImage;
-        Usericon usericon;
+        CachedImage<Emoticon> emoteImage;
+        CachedImage<Usericon> usericonImage;
 
         if ((url = getUrl(element)) != null && !isUrlDeleted(element)) {
             if (linkListener != null) {
@@ -224,11 +224,11 @@ public class LinkController extends MouseAdapter {
             }
         } else if ((emoteImage = getEmoticonImage(element)) != null) {
             for (UserListener listener : userListener) {
-                listener.emoteClicked(emoteImage.getEmoticon(), e);
+                listener.emoteClicked(emoteImage.getObject(), e);
             }
-        } else if ((usericon = getUsericon(element)) != null) {
+        } else if ((usericonImage = getUsericonImage(element)) != null) {
             for (UserListener listener : userListener) {
-                listener.usericonClicked(usericon, e);
+                listener.usericonClicked(usericonImage.getObject(), e);
             }
         }
     }
@@ -274,15 +274,15 @@ public class LinkController extends MouseAdapter {
             return;
         }
         
-        EmoticonImage emoteImage = getEmoticonImage(element);
-        Usericon usericon = getUsericon(element);
+        CachedImage<Emoticon> emoteImage = getEmoticonImage(element);
+        CachedImage<Usericon> usericonImage = getUsericonImage(element);
         String replacedText = getReplacedText(element);
         String replyMsgId = getReplyText(element);
         User mention = getMention(element);
         if (emoteImage != null) {
             popup.show(textPane, element, p -> makeEmoticonPopupText(emoteImage, popupImagesEnabled, p, element), emoteImage.getImageIcon().getIconWidth());
-        } else if (usericon != null) {
-            popup.show(textPane, element, p -> makeUsericonPopupText(usericon, getUsericonInfo(element), p), usericon.image.getIconWidth());
+        } else if (usericonImage != null) {
+            popup.show(textPane, element, p -> makeUsericonPopupText(usericonImage, getUsericonInfo(element), p), usericonImage.getImageIcon().getIconWidth());
         } else if (replacedText != null) {
             popup.show(textPane, element, p -> makeReplacementPopupText(replacedText, p), 1);
         } else if (replyMsgId != null) {
@@ -299,7 +299,7 @@ public class LinkController extends MouseAdapter {
                 || (user = getUser(element)) != null
                 || mention != null
                 || emoteImage != null
-                || usericon != null;
+                || usericonImage != null;
         
         if (isClickableElement) {
             textPane.setCursor(HAND_CURSOR);
@@ -361,12 +361,12 @@ public class LinkController extends MouseAdapter {
         return (String) e.getAttributes().getAttribute(ChannelTextPane.Attribute.ID_AUTOMOD);
     }
     
-    private EmoticonImage getEmoticonImage(Element e) {
-        return (EmoticonImage)(e.getAttributes().getAttribute(ChannelTextPane.Attribute.EMOTICON));
+    private CachedImage<Emoticon> getEmoticonImage(Element e) {
+        return (CachedImage<Emoticon>)(e.getAttributes().getAttribute(ChannelTextPane.Attribute.EMOTICON));
     }
     
-    private Usericon getUsericon(Element e) {
-        return (Usericon)(e.getAttributes().getAttribute(ChannelTextPane.Attribute.USERICON));
+    private CachedImage<Usericon> getUsericonImage(Element e) {
+        return (CachedImage<Usericon>)(e.getAttributes().getAttribute(ChannelTextPane.Attribute.USERICON));
     }
     
     private String getUsericonInfo(Element e) {
@@ -448,8 +448,8 @@ public class LinkController extends MouseAdapter {
         }
         String url = getUrl(element);
         String link = getGeneralLink(element);
-        EmoticonImage emoteImage = getEmoticonImage(element);
-        Usericon usericon = getUsericon(element);
+        CachedImage<Emoticon> emoteImage = getEmoticonImage(element);
+        CachedImage<Usericon> usericonImage = getUsericonImage(element);
         JPopupMenu m = null;
         if (user != null) {
             m = new UserContextMenu(user, getMsgId(element),
@@ -467,8 +467,8 @@ public class LinkController extends MouseAdapter {
         else if (emoteImage != null) {
             m = new EmoteContextMenu(emoteImage, contextMenuListener);
         }
-        else if (usericon != null) {
-            m = new UsericonContextMenu(usericon, contextMenuListener);
+        else if (usericonImage != null) {
+            m = new UsericonContextMenu(usericonImage, contextMenuListener);
         }
         else if (!StringUtil.isNullOrEmpty(selectedText) && ((JTextPane) e.getSource()).hasFocus()) {
             /**
@@ -712,6 +712,9 @@ public class LinkController extends MouseAdapter {
                     // Top
                     if (bounds.y - 20 > r.y) {
                         r.y += labelSize.height + r.height + 4;
+                        if (bounds.y > r.y) {
+                            return null;
+                        }
                     }
                     // Bottom
                     if (bounds.y + viewPort.getHeight() < r.y + labelSize.height) {
@@ -785,23 +788,13 @@ public class LinkController extends MouseAdapter {
     
     private static final Object unique = new Object();
     
-    private static void makeEmoticonPopupText(EmoticonImage emoticonImage, boolean showImage, MyPopup popup, Element element) {
-        Debugging.println("emoteinfo", "makePopupText %s", emoticonImage.getEmoticon());
-        Emoticon emote = emoticonImage.getEmoticon();
-        EmotesetInfo info = TwitchEmotesApi.api.getInfoByEmote(unique, result -> {
-            SwingUtilities.invokeLater(() -> {
-                Debugging.println("emoteinfo", "Request result: %s", result);
-                // The popup may be for a different element by now
-                if (popup.isCurrentElement(element)) {
-                    popup.setText(makeEmoticonPopupText2(emoticonImage, showImage, result, popup));
-                }
-            });
-        }, emote);
-        popup.setText(makeEmoticonPopupText2(emoticonImage, showImage, info, popup));
+    private static void makeEmoticonPopupText(CachedImage<Emoticon> emoticonImage, boolean showImage, MyPopup popup, Element element) {
+        Debugging.println("emoteinfo", "makePopupText %s", emoticonImage.getObject());
+        popup.setText(makeEmoticonPopupText2(emoticonImage, showImage, popup));
     }
     
-    private static String makeEmoticonPopupText2(EmoticonImage emoticonImage, boolean showImage, EmotesetInfo emoteInfo, MyPopup popup) {
-        Emoticon emote = emoticonImage.getEmoticon();
+    private static String makeEmoticonPopupText2(CachedImage<Emoticon> emoticonImage, boolean showImage, MyPopup popup) {
+        Emoticon emote = emoticonImage.getObject();
         String result = "";
         if (emote.type == Emoticon.Type.TWITCH) {
             if (emote.subType == Emoticon.SubType.CHEER) {
@@ -812,7 +805,7 @@ public class LinkController extends MouseAdapter {
                     result += " Global";
                 }
             } else {
-                result = TwitchEmotesApi.getEmoteType(emote, emoteInfo, true);
+                result = TwitchEmotesApi.getEmoteType(emote);
             }
         } else if (emote.type == Emoticon.Type.CUSTOM2) {
             result = "Local Emote";
@@ -832,7 +825,7 @@ public class LinkController extends MouseAdapter {
         }
 
         if (showImage && !emote.isAnimated()) {
-            EmoticonImage icon = emote.getIcon(2, 0, ImageType.STATIC, (o,n,c) -> {
+            CachedImage<Emoticon> icon = emote.getIcon(2, 0, ImageType.STATIC, (o,n,c) -> {
                 // The set ImageIcon will have been updated
                 popup.forceUpdate();
             });
@@ -849,11 +842,12 @@ public class LinkController extends MouseAdapter {
     // Usericon Popup
     //----------------
     
-    private static void makeUsericonPopupText(Usericon usericon, String moreInfo, MyPopup p) {
+    private static void makeUsericonPopupText(CachedImage<Usericon> usericonImage, String moreInfo, MyPopup p) {
+        Usericon usericon = usericonImage.getObject();
         String info;
         if (!usericon.metaTitle.isEmpty()) {
             info = POPUP_HTML_PREFIX+"Badge: "+usericon.metaTitle;
-        } else if (usericon.type == Usericon.Type.HL) {
+        } else if (usericon.type == Usericon.Type.HL || usericon.type == Usericon.Type.FIRSTMSG) {
             // Customize text since not really a badge
             info = POPUP_HTML_PREFIX+usericon.type.label;
         } else if (usericon.type == Usericon.Type.CHANNEL_LOGO) {
@@ -868,7 +862,7 @@ public class LinkController extends MouseAdapter {
             info += " (Custom)";
         }
         if (Debugging.isEnabled("tt")) {
-            info += " ["+usericon.image.getDescription()+"]";
+            info += " ["+usericonImage.getImageIcon().getDescription()+"]";
         }
         if (!StringUtil.isNullOrEmpty(moreInfo)) {
             info += "<br />("+moreInfo+")";

@@ -28,9 +28,11 @@ import javax.swing.BorderFactory;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.SwingConstants;
@@ -46,16 +48,22 @@ class UsericonEditor extends TableEditor<Usericon> {
     
     private static final Map<Usericon.Type, String> typeNames;
     
-    private final MyItemEditor editor;
+    private MyItemEditor editor;
+    private Set<String> types;
     
     public UsericonEditor(JDialog owner, LinkLabelListener linkLabelListener) {
         super(SORTING_MODE_MANUAL, false);
         
-        editor = new MyItemEditor(owner, linkLabelListener);
         setModel(new MyTableModel());
-        setItemEditor(editor);
+        setItemEditor(() -> {
+            if (editor == null) {
+                editor = new MyItemEditor(owner, linkLabelListener);
+                editor.setTwitchBadgeTypes(types);
+            }
+            return editor;
+        });
         setRendererForColumn(1, new IdRenderer(getForeground()));
-        setRendererForColumn(2, new ImageRenderer());
+        setRendererForColumn(2, new ImageRenderer(this));
         setRendererForColumn(3, new ChannelRenderer(getForeground()));
     }
     
@@ -73,6 +81,7 @@ class UsericonEditor extends TableEditor<Usericon> {
         typeNames.put(Usericon.Type.TWITCH, "Other (Twitch)");
         typeNames.put(Usericon.Type.OTHER, "Other (Third-Party)");
         typeNames.put(Usericon.Type.HL, "Highlighted (by points)");
+        typeNames.put(Usericon.Type.FIRSTMSG, "First Message in Channel");
         typeNames.put(Usericon.Type.ALL, "All Types");
         typeNames.put(Usericon.Type.TURBO, "Turbo");
         typeNames.put(Usericon.Type.PRIME, "Prime");
@@ -83,7 +92,12 @@ class UsericonEditor extends TableEditor<Usericon> {
     }
     
     public void setTwitchBadgeTypes(Set<String> types) {
-        editor.setTwitchBadgeTypes(types);
+        if (editor != null) {
+            editor.setTwitchBadgeTypes(types);
+        }
+        else {
+            this.types = types;
+        }
     }
     
     public void addUsericonOfBadgeType(Usericon.Type type, String idVersion) {
@@ -191,8 +205,11 @@ class UsericonEditor extends TableEditor<Usericon> {
      */
     private static class ImageRenderer extends DefaultTableCellRenderer {
 
-        ImageRenderer() {
+        private final JComponent comp;
+        
+        ImageRenderer(JComponent comp) {
             setHorizontalAlignment(SwingConstants.CENTER);
+            this.comp = comp;
         }
         
         @Override
@@ -216,7 +233,9 @@ class UsericonEditor extends TableEditor<Usericon> {
                 setIcon(null);
                 setText("No image");
             } else {
-                setIcon(icon.image);
+                setIcon(icon.getIcon(1f, 0, (oldImage, newImage, sizeChanged) -> {
+                    comp.repaint();
+                }).getImageIcon());
                 setText(null);
             }
         }
@@ -513,10 +532,12 @@ class UsericonEditor extends TableEditor<Usericon> {
                 preview.setText("No image.");
             } else if (currentIcon.fileName.startsWith("$")) {
                 preview.setText("Ref image.");
-            } else if (currentIcon.image == null) {
-                preview.setText(ERROR_LOADING_IMAGE);
+//            } else if (currentIcon.image == null) {
+//                preview.setText(ERROR_LOADING_IMAGE);
             } else {
-                ImageIcon image = currentIcon.image;
+                ImageIcon image = currentIcon.getIcon(1f, 0, (oldImage, newImage, sizeChanged) -> {
+                    preview.repaint();
+                }).getImageIcon();
                 preview.setIcon(image);
                 preview.setText(image.getIconWidth()+"x"+image.getIconHeight());
             }

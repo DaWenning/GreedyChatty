@@ -17,6 +17,10 @@
     <h1><a name="top">Release Information</a></h1>
     
     <p>
+        <a href="#0.21">0.21</a> |
+        <a href="#0.20">0.20</a> |
+        <a href="#0.19">0.19</a> |
+        <a href="#0.18">0.18</a> |
         <a href="#0.17">0.17</a> |
         <a href="#0.16">0.16</a> |
         <a href="#0.15">0.15</a> |
@@ -66,7 +70,146 @@
     full list of changes.</p>
     
     <h2>
-        <a name="0.17">Version 0.17</a> <a name="latest">(This one!)</a> (2022-01-31)
+        <a name="0.21">Version 0.21</a> <a name="latest">(This one!)</a> (2022-??-??)
+        <a href="#top" class="top">[back to top]</a>
+    </h2>
+    <pre>
+        Beta, TBD
+    </pre>
+    
+    <h2>
+        <a name="0.20">Version 0.20</a> (2022-08-11)
+        <a href="#top" class="top">[back to top]</a>
+    </h2>
+    <pre>
+### New Features
+- Added experimental 7TV emotes support (currently only Windows and Linux x64),
+  zero-width emotes not supported right now (show up like normal emotes)
+- Added `/announce` command color variants (e.g. `/announceblue`) since Twitch
+  added an API for it
+- Added some additional info to TAB Completion for emotes and commands
+
+### Settings
+- Added dialog on first start (when no settings are found) to set some basic
+  defaults (look, userlist, font, notifications), the same options can also be
+  found in the Settings Dialog under "Simple Presets"
+- Changed some defaults (only has an effect when starting from fresh settings):
+  - Show AutoMod messages
+  - Use native window for all Look&Feel (to allow for native window management)
+  - Rejoin channels on start
+  - Changed timestamp and chat font
+- Added setting for minimizing Chatty on start
+- Added setting for also minimizing popouts to tray when manually minimizing
+  main window to tray
+- Added setting for desktop notifications staying open on mouse hover
+- Improved Settings Dialog initial open speed
+
+### Other
+- A Custom Command calling another Custom Command is now possible
+- Slightly improved memory usage
+- Updated help
+
+### Bugfixes
+- Fixed many duplicate "popoutAttributes" being saved
+    </pre>
+    
+    <h2>
+        <a name="0.19">Version 0.19</a> (2022-07-03)
+        <a href="#top" class="top">[back to top]</a>
+    </h2>
+    <pre>
+### Commands
+- Added `/timer` for delaying commands
+- Added `/exportText` to write text to a file in the "exported" folder
+- Added `/clearUserMessages` to clear User Dialog messages (or just the count
+  for `config:firstmsg`) for all users
+- Added `/triggerNotification` to trigger a special "Triggered by command"
+  notification (has to be added as an event in the Notification Settings)
+- Added Custom Command function `$round()`, added `%` operator to `$calc()`
+- Added `/j` as default Custom Command
+
+### Settings
+- Added `msg` variant to all text matching prefixes
+- Added setting to return to previously active tab when closing tab
+- Added settings for pausing animated emotes
+- Added Live Streams favorite games to Settings Dialog
+- Added setting to change locale
+- Added commands `/setSwitch` and `/setList`
+
+### Other
+- Restore active tabs when loading layout
+- Improved showing Highlight matches for some message types
+- Changed formatting of user name for announcements
+- Updated Twemoji image set to v14
+- Some memory usage improvements
+- Improved debug output
+- Updated help
+
+### Bugfixes
+- Fixed bug where animated emotes with transparency aren't displayed correctly
+  when the first frame doesn't have transparency
+- Fixed Tab Completion popup being stuck when closing tab via hotkey
+- Fixed some locale dependent issues
+    </pre>
+    
+    <h2>
+        <a name="0.18">Version 0.18</a> (2022-04-09)
+        <a href="#top" class="top">[back to top]</a>
+    </h2>
+    <pre>
+### Twitch Features
+- Added new Announcement messages and `/announce` command (Twitch hasn't added
+  commands for the color variants yet)
+- Added badge for first message in channel (shown for mods only)
+- Added workaround for Twitch filtering out Emoji joiner characters
+
+### Highlight / Ignore Matching
+- Added separate `_global_highlightBlacklist` and `_global_ignoreBlacklist`
+  Matching Preset names
+- Added Highlight Matching substitutes / lookalikes
+- Added setting and prefix to allow messages to be highlighted even if they
+  would otherwise have been ignored (Override Ignore if Highlighted)
+- Added `if:` Matching prefix to specify conditions with an "or" relationship
+
+### Custom Commands
+- Added additional Custom Command identifiers related to user/channel
+- Added identifier for User Dialog/Context Menu selected message time
+- Added optional unix time input to `$datetime()` Custom Command function
+- Added `/runin` command to run a command in a specific channel
+
+### Other Settings
+- Added badge scaling settings
+- Emote scaling setting now applies to GIFs as well
+- Added option to add Stream Uptime to timestamps
+- Added search field to Settings Dialog
+- Added sound test button to Sound Settings tab
+- Added setting to show Connect Dialog (when it usually wouldn't) if login or
+  channel is missing
+- Added hotkey action to switch to a specific tab index/channel
+- Added warning to hotkey table when the same key is used more than once
+
+### Other
+- Added a new badge context menu entry to hide badges (you could already add a
+  Custom Badge with no image for that, but this is a bit more straightforward)
+- Added "View" menu entry to toggle the userlist, changed default hotkey
+- Updated help
+
+### Bugfixes
+- Fixed scaling on Emote Details page
+- Fixed Favorite Emotes not working properly for Local Emotes
+- Make GIF animations (of the same image) more likely to stay synchronized
+- Fixed some emotes showing "[modified]" when they weren't actually emotes
+  modified by channel points
+- Added workaround for played sounds sometimes not being cleaned up correctly
+- Fixed focus being stolen from the input box when a second channel is opened
+- Fixed error sometimes occuring when closing window and moving mouse over chat
+- Fixed rare edge case where a PubSub message could reopen a closed channel tab
+- Fixed small issues when adding a hidden badge
+- Fixed error that could occur when saving the "login" file failed
+    </pre>
+    
+    <h2>
+        <a name="0.17">Version 0.17</a> (2022-01-31)
         <a href="#top" class="top">[back to top]</a>
     </h2>
     <p>The Twitch v5 API is scheduled to be shutdown at the end of February 2022

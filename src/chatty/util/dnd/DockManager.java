@@ -6,6 +6,7 @@ import chatty.util.dnd.DockSetting.PopoutType;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Frame;
+import static java.awt.Frame.ICONIFIED;
 import java.awt.Image;
 import java.awt.KeyboardFocusManager;
 import java.awt.MouseInfo;
@@ -17,6 +18,7 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -285,6 +287,23 @@ public class DockManager {
     }
     
     /**
+     * Get a list of contents from the same tab pane as the given content.
+     * 
+     * @param relativeToContent The content to base this on
+     * @return List of contents, including the given one (never null)
+     */
+    public List<DockContent> getContentsRelativeTo(DockContent relativeToContent) {
+        List<DockContent> result = new ArrayList<>();
+        // Returns the closest tab first, so reverse for -1 (left) direction
+        List<DockContent> before = getContentsRelativeTo(relativeToContent, -1);
+        Collections.reverse(before);
+        result.addAll(before);
+        result.add(relativeToContent);
+        result.addAll(getContentsRelativeTo(relativeToContent, 1));
+        return result;
+    }
+    
+    /**
      * Get the content contained in the tab relative to given content.
      * 
      * @param content The content to base this on
@@ -292,7 +311,7 @@ public class DockManager {
      * the right (wraps around if necessary)
      * @return The next tab, or null if none could be found
      */
-    public DockContent getContentTab(DockContent content, int direction) {
+    public DockContent getContentTabRelative(DockContent content, int direction) {
         List<DockContent> c = getContentsRelativeTo(content, direction);
         if (!c.isEmpty()) {
             return c.get(0);
@@ -300,6 +319,38 @@ public class DockManager {
         c = getContentsRelativeTo(content, -direction);
         if (!c.isEmpty()) {
             return c.get(c.size() - 1);
+        }
+        return null;
+    }
+    
+    /**
+     * Get the content in the same tab pane as the given content and at the
+     * given index.
+     * 
+     * @param content
+     * @param index
+     * @return The DockContent at the given index, or null if none could be
+     * found
+     */
+    public DockContent getContentTabAbsolute(DockContent content, int index) {
+        List<DockContent> c = getContentsRelativeTo(content);
+        if (index >= 0 && index < c.size()) {
+            return c.get(index);
+        }
+        return null;
+    }
+    
+    /**
+     * Get the content with the given id.
+     * 
+     * @param id
+     * @return The content, or null if none could be found
+     */
+    public DockContent getContentById(String id) {
+        for (DockContent content : getContents()) {
+            if (content.getId().equals(id)) {
+                return content;
+            }
         }
         return null;
     }
@@ -582,8 +633,13 @@ public class DockManager {
         else {
             window.setLocationByPlatform(true);
         }
-        if (state != -1 && window instanceof Frame) {
-            ((Frame) window).setExtendedState(state);
+        if (window instanceof Frame) {
+            Frame frame = (Frame) window;
+            if (state == -1) {
+                // When a popout opens, actually show it, but preserve maximized
+                state = frame.getExtendedState() & ~ICONIFIED;
+            }
+            frame.setExtendedState(state);
         }
         if (popoutParent != null) {
             window.setAlwaysOnTop(popoutParent.isAlwaysOnTop());
@@ -666,7 +722,9 @@ public class DockManager {
             popoutTypeDrag = (DockSetting.PopoutType) value;
         }
         else if (setting == DockSetting.Type.POPOUT_ICONS) {
-            popoutIcons = (List<Image>) value;
+            @SuppressWarnings("unchecked") // POPOUT_ICONS always must be this
+            List<Image> images = (List<Image>) value;
+            popoutIcons = images;
         }
         else if (setting == DockSetting.Type.POPOUT_PARENT) {
             if (popoutParent != value) {
@@ -748,6 +806,35 @@ public class DockManager {
     public void sortContent(DockContent content) {
         main.sortContent(content);
         popouts.forEach(w -> w.getBase().sortContent(content));
+    }
+    
+    public void minimizeWindows() {
+        for (DockPopout p : popouts) {
+            if (p.getWindow() instanceof Frame) {
+                Frame frame = (Frame) p.getWindow();
+                frame.setExtendedState(frame.getExtendedState() | ICONIFIED);
+            }
+        }
+    }
+    
+    public void hideWindows() {
+        for (DockPopout p : popouts) {
+            if (p.getWindow() instanceof Frame) {
+                Frame frame = (Frame) p.getWindow();
+                frame.setVisible(false);
+            }
+        }
+    }
+    
+    public void showHiddenWindows() {
+        for (DockPopout p : popouts) {
+            if (p.getWindow() instanceof Frame && !p.getWindow().isVisible()) {
+                Frame frame = (Frame) p.getWindow();
+                frame.setVisible(true);
+                frame.setExtendedState(frame.getExtendedState() & ~ICONIFIED);
+                frame.toFront();
+            }
+        }
     }
     
 }

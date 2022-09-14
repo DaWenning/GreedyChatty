@@ -99,10 +99,18 @@ public class InfoMessage {
         return System.currentTimeMillis() - createdTime;
     }
     
+    public int getMsgStart() {
+        return -1;
+    }
+    
+    public int getMsgEnd() {
+        return -1;
+    }
+    
     public Pair<String, String> getLink() {
         if (tags != null) {
             if (tags.getHosted() != null) {
-                return new Pair("Join", "join."+tags.getHosted());
+                return new Pair<>("Join", "join."+tags.getHosted());
             }
         }
         return null;

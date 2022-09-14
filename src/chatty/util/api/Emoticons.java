@@ -5,6 +5,8 @@ import chatty.Chatty;
 import chatty.Helper;
 import chatty.gui.emoji.EmojiUtil;
 import chatty.util.CombinedEmoticon;
+import chatty.util.CombinedIterator;
+import chatty.util.LogUtil;
 import chatty.util.MiscUtil;
 import chatty.util.StringUtil;
 import chatty.util.TwitchEmotesApi.EmotesetInfo;
@@ -26,6 +28,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -151,7 +154,7 @@ public class Emoticons {
     /**
      * Global emotes the local user has access to.
      */
-    private final Set<Emoticon> usableGlobalEmotes = new HashSet<>();
+    private final GlobalEmotes usableGlobalEmotes = new GlobalEmotes();
     
     /**
      * Channel-specific emotes the local user has access to. Needs to be in a
@@ -182,19 +185,27 @@ public class Emoticons {
     
     private static final HashSet<Emoticon> EMPTY_SET = new HashSet<>();
     
-    private final Set<String> ignoredEmotes = new HashSet<>();
+    private final IgnoredEmotes ignoredEmotes = new IgnoredEmotes();
     
     private final EmoticonFavorites favorites = new EmoticonFavorites();
     
+    private static final int DEFAULT_IMAGE_EXPIRE_MINUTES = 4*60;
+    private static final int FASTER_IMAGE_EXPIRE_MINUTES = 1*60;
+    
     public Emoticons() {
         Timer timer = new Timer(1*60*60*1000, e -> {
-            int removedCount = 0;
-            removedCount += clearOldEmoticonImages(twitchEmotesById.values());
-            removedCount += clearOldEmoticonImages(otherGlobalEmotes);
-            for (Set<Emoticon> emotes : streamEmoticons.values()) {
-                removedCount += clearOldEmoticonImages(emotes);
+            int imageExpireMinutes = DEFAULT_IMAGE_EXPIRE_MINUTES;
+            if (LogUtil.getMemoryPercentageOfMax() > 80) {
+                imageExpireMinutes = FASTER_IMAGE_EXPIRE_MINUTES;
             }
-            LOGGER.info("Cleared " + removedCount + " unused emoticon images");
+            int removedCount = 0;
+            removedCount += clearOldEmoticonImages(twitchEmotesById.values(), imageExpireMinutes);
+            removedCount += clearOldEmoticonImages(otherGlobalEmotes, imageExpireMinutes);
+            for (Set<Emoticon> emotes : streamEmoticons.values()) {
+                removedCount += clearOldEmoticonImages(emotes, imageExpireMinutes);
+            }
+            LOGGER.info(String.format("Cleared %d unused emoticon images (%dm)",
+                    removedCount, imageExpireMinutes));
         });
         timer.setRepeats(true);
         timer.start();
@@ -247,7 +258,8 @@ public class Emoticons {
         }
         int removedCount = 0;
         if (update.typeToRemove == Emoticon.Type.FFZ
-                || update.typeToRemove == Emoticon.Type.BTTV) {
+                || update.typeToRemove == Emoticon.Type.BTTV
+                || update.typeToRemove == Emoticon.Type.SEVENTV) {
             Iterator<Emoticon> it;
             if (update.roomToRemove == null) {
                 // Global Non-Twitch
@@ -295,7 +307,7 @@ public class Emoticons {
             localEmotes.clear();
         }
         if (removedCount >= 0) {
-            LOGGER.info(String.format("Removed %d emotes (%s/%s/%s/%s)",
+            LOGGER.info(String.format(Locale.ROOT, "Removed %d emotes (%s/%s/%s/%s)",
                     removedCount,
                     update.typeToRemove,
                     update.subTypeToRemove,
@@ -360,10 +372,12 @@ public class Emoticons {
                 twitchEmotesById.put(emote.stringId, emote);
             }
         }
-        LOGGER.info("Added "+newEmoticons.size()+" emotes."
-                + " Now "+emoticonsByEmoteset.size()+" emotesets and "
-                +streamEmoticons.size()+" channels with exclusive emotes ("
-                +getGlobalTwitchEmotes().size()+" global emotes).");
+        LOGGER.info(String.format("Added %d emotes. Now %d emotesets, %d channels, %d Twitch Global, %d Other Global.",
+                newEmoticons.size(),
+                emoticonsByEmoteset.size(),
+                streamEmoticons.size(),
+                globalTwitchEmotes.size(),
+                otherGlobalEmotes.size()));
         findFavorites();
     }
     
@@ -379,13 +393,23 @@ public class Emoticons {
          */
         if (!emote.hasStreamRestrictions()) {
             if (emote.hasGlobalEmoteset() || localEmotesets.contains(emote.emoteset)) {
+                /**
+                 * Remove first to ensure emote is updated. When new emotes are
+                 * received from the API, the ones used for received messages
+                 * (twitchEmotesById), as well as other collections, are updated
+                 * with the new object, so this one should be too, so that the
+                 * same object is used for sent messages (especially to have
+                 * animated emotes synchronized).
+                 */
+                usableGlobalEmotes.remove(emote);
                 usableGlobalEmotes.add(emote);
             }
         }
         else {
             if (emote.hasGlobalEmoteset() || allLocalEmotesets.contains(emote.emoteset)) {
                 for (String stream : emote.getStreamRestrictions()) {
-                    MiscUtil.getSetFromMap(usableStreamEmotes, stream).add(emote);
+                    getUsableStreamEmotesSet(stream).remove(emote);
+                    getUsableStreamEmotesSet(stream).add(emote);
                 }
             }
         }
@@ -453,10 +477,11 @@ public class Emoticons {
         return allHelixEmoteIds.contains(emote.stringId);
     }
     
-    private static int clearOldEmoticonImages(Collection<Emoticon> emotes) {
+    private static int clearOldEmoticonImages(Collection<Emoticon> emotes,
+                                              int imageExpireMinutes) {
         int removedCount = 0;
         for (Emoticon emote : emotes) {
-            removedCount += emote.clearOldImages();
+            removedCount += emote.clearOldImages(imageExpireMinutes);
         }
         return removedCount;
     }
@@ -555,8 +580,12 @@ public class Emoticons {
         return emote;
     }
     
-    public Set<Emoticon> getUsableGlobalEmotes() {
-        return usableGlobalEmotes;
+    public Set<Emoticon> getUsableGlobalTwitchEmotes() {
+        return usableGlobalEmotes.getTwitch();
+    }
+    
+    public Set<Emoticon> getUsableGlobalOtherEmotes() {
+        return usableGlobalEmotes.getOther();
     }
     
     public Collection<Emoticon> getUsableEmotesByStream(String stream) {
@@ -623,10 +652,32 @@ public class Emoticons {
                 // Add all accessible
                 for (Emoticon emote : entry.getValue()) {
                     if (emote.hasGlobalEmoteset() || allLocalEmotesets.contains(emote.emoteset)) {
-                        MiscUtil.getSetFromMap(usableStreamEmotes, stream).add(emote);
+                        getUsableStreamEmotesSet(stream).add(emote);
                     }
                 }
             }
+        }
+    }
+    
+    private Set<Emoticon> getUsableStreamEmotesSet(String stream) {
+        if (!usableStreamEmotes.containsKey(stream)) {
+            /**
+             * Sort Twitch emotes first so that Follower emotes are preferred.
+             */
+            usableStreamEmotes.put(stream, new TreeSet<>(new SortEmotesByTypeAndCode()));
+        }
+        return usableStreamEmotes.get(stream);
+    }
+    
+    private static class SortEmotesByTypeAndCode implements Comparator<Emoticon> {
+        
+        @Override
+        public int compare(Emoticon o1, Emoticon o2) {
+            int compareType = o1.type.compareTo(o2.type);
+            if (compareType != 0) {
+                return compareType;
+            }
+            return o1.code.compareTo(o2.code);
         }
     }
     
@@ -706,31 +757,41 @@ public class Emoticons {
      * @param ignoredEmotes A Collection of emote codes to ignore
      */
     public void setIgnoredEmotes(Collection<String> ignoredEmotes) {
-        this.ignoredEmotes.clear();
-        this.ignoredEmotes.addAll(ignoredEmotes);
+        this.ignoredEmotes.setData(ignoredEmotes);
     }
     
     /**
      * Adds the given emote code to the list of ignored emotes.
      * 
-     * @param emoteCode The emote code to add
+     * @param emote The emote to edit the ignore state for
+     * @param context In what context to ignore the emote, can be 0 to unignore
+     * @param settings A reference to the settings
      */
-    public void addIgnoredEmote(String emoteCode) {
-        ignoredEmotes.add(emoteCode);
+    public void setEmoteIgnored(Emoticon emote, int context, Settings settings) {
+        ignoredEmotes.add(emote, context);
+        settings.putList("ignoredEmotes", ignoredEmotes.getData());
+    }
+    
+    /**
+     * Get all ignore items that match the given emote.
+     * 
+     * @param emote The emote to find items for
+     * @return A list of matches, may be empty, never null
+     */
+    public Collection<IgnoredEmotes.Item> getIgnoredEmoteMatches(Emoticon emote) {
+        return ignoredEmotes.getMatches(emote);
     }
     
     /**
      * Check if the given emote is on the list of ignored emotes. Compares the
      * emote code to the codes on the list.
-     * 
+     *
      * @param emote The Emoticon to check
+     * @param context In what context the emote has to be ignored, 0 for any
      * @return true if the emote is ignored, false otherwise
      */
-    public boolean isEmoteIgnored(Emoticon emote) {
-        if (emote instanceof CheerEmoticon) {
-            return ignoredEmotes.contains(((CheerEmoticon)emote).getSimpleCode());
-        }
-        return ignoredEmotes.contains(emote.code);
+    public boolean isEmoteIgnored(Emoticon emote, int context) {
+        return ignoredEmotes.isIgnored(emote, context);
     }
     
     /**
@@ -885,6 +946,10 @@ public class Emoticons {
         favorites.removeFavorite(emote);
     }
     
+    public void removeFavorites(Collection<EmoticonFavorites.Favorite> toRemove) {
+        favorites.removeFavorites(toRemove);
+    }
+    
     public boolean isFavorite(Emoticon emote) {
         return favorites.isFavorite(emote);
     }
@@ -893,13 +958,17 @@ public class Emoticons {
         return favorites.getFavorites();
     }
     
+    public Collection<EmoticonFavorites.Favorite> getNotFoundFavorites() {
+        return favorites.getNotFound();
+    }
+    
     public void loadFavoritesFromSettings(Settings settings) {
         favorites.loadFavoritesFromSettings(settings);
         findFavorites();
     }
     
     private void findFavorites() {
-        favorites.find(twitchEmotesById, otherGlobalEmotes, emoji, customEmotes);
+        favorites.find(twitchEmotesById, otherGlobalEmotes, emoji, customEmotes, localEmotes);
     }
     
     public Set<String> getFavoritesNonGlobalEmotesets() {
@@ -1239,4 +1308,43 @@ public class Emoticons {
     public void setCheerBackground(Color color) {
         cheers.setBackgroundColor(color);
     }
+    
+    /**
+     * Split up so global Twitch emotes can take precedence over
+     * channel-specific emotes, while other global emotes do not.
+     */
+    private static class GlobalEmotes {
+        
+        private final Set<Emoticon> twitch = new HashSet<>();
+        private final Set<Emoticon> other = new HashSet<>();
+        
+        public void add(Emoticon emote) {
+            if (emote.type == Emoticon.Type.TWITCH
+                    || emote.type == Emoticon.Type.CUSTOM2) {
+                twitch.add(emote);
+            }
+            else {
+                other.add(emote);
+            }
+        }
+        
+        public void remove(Emoticon emote) {
+            twitch.remove(emote);
+            other.remove(emote);
+        }
+        
+        public Set<Emoticon> getTwitch() {
+            return twitch;
+        }
+        
+        public Set<Emoticon> getOther() {
+            return other;
+        }
+        
+        public Iterator<Emoticon> iterator() {
+            return new CombinedIterator<>(twitch, other);
+        }
+        
+    }
+    
 }

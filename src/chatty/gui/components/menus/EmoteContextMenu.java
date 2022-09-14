@@ -10,8 +10,8 @@ import chatty.util.StringUtil;
 import chatty.util.TwitchEmotesApi;
 import chatty.util.TwitchEmotesApi.EmotesetInfo;
 import chatty.util.api.Emoticon;
-import chatty.util.api.Emoticon.EmoticonImage;
 import chatty.util.api.Emoticons;
+import chatty.util.api.CachedImage;
 import java.awt.event.ActionEvent;
 
 /**
@@ -25,10 +25,10 @@ public class EmoteContextMenu extends ContextMenu {
     
     private static Emoticons emoteManager;
     private final ContextMenuListener listener;
-    private final EmoticonImage emoteImage;
+    private final CachedImage<Emoticon> emoteImage;
     
-    public EmoteContextMenu(EmoticonImage emoteImage, ContextMenuListener listener) {
-        Emoticon emote = emoteImage.getEmoticon();
+    public EmoteContextMenu(CachedImage<Emoticon> emoteImage, ContextMenuListener listener) {
+        Emoticon emote = emoteImage.getObject();
         this.listener = listener;
         this.emoteImage = emoteImage;
         
@@ -45,22 +45,37 @@ public class EmoteContextMenu extends ContextMenu {
             }
         }
         addItem("emoteImage", emoteImage.getSizeString(), ICON_IMAGE);
-        if (emote.type == Emoticon.Type.TWITCH || emote.type == Emoticon.Type.FFZ
-                || emote.type == Emoticon.Type.BTTV) {
-            addItem("emoteId", "ID: "+StringUtil.shortenTo(emote.stringId, 14), ICON_WEB);
+        switch (emote.type) {
+            case TWITCH:
+            case FFZ:
+            case BTTV:
+            case SEVENTV:
+                addItem("emoteId", "ID: "+StringUtil.shortenTo(emote.stringId, 14), ICON_WEB);
+                break;
         }
         
         // Non-Twitch Emote Information
         if (emote.type != Emoticon.Type.TWITCH) {
             addSeparator();
-            if (emote.type == Emoticon.Type.FFZ) {
-                addItem("ffzlink", "FrankerFaceZ Emote", ICON_WEB);
-            } else if (emote.type == Emoticon.Type.BTTV) {
-                addItem("bttvlink", "BetterTTV Emote", ICON_WEB);
-            } else if (emote.type == Emoticon.Type.CUSTOM) {
-                addItem("", "Custom Emote");
-            } else if (emote.type == Emoticon.Type.EMOJI) {
-                addItem("", "Emoji");
+            switch (emote.type) {
+                case FFZ:
+                    addItem("ffzlink", "FrankerFaceZ Emote", ICON_WEB);
+                    break;
+                case BTTV:
+                    addItem("bttvlink", "BetterTTV Emote", ICON_WEB);
+                    break;
+                case SEVENTV:
+                    addItem("seventvlink", "7TV Emote", ICON_WEB);
+                    break;
+                case CUSTOM:
+                    addItem("", "Custom Emote");
+                    break;
+                case CUSTOM2:
+                    addItem("", "Local Emote");
+                    break;
+                case EMOJI:
+                    addItem("", "Emoji");
+                    break;
             }
             if (emote.creator != null) {
                 addItem("emoteCreator", Language.getString("emoteCm.emoteBy", emote.creator));
@@ -80,34 +95,29 @@ public class EmoteContextMenu extends ContextMenu {
             addStreamSubmenu(emote);
         }
         
-        if (emote.type == Emoticon.Type.NOT_FOUND_FAVORITE) {
-            addItem("", "Not found favorite");
-        }
-        
         if (!emote.hasGlobalEmoteset()) {
             addSeparator();
-            EmotesetInfo info = TwitchEmotesApi.api.getInfoByEmote(unique, null, emote);
-            addItem("", TwitchEmotesApi.getEmoteType(emote, info, false));
-            if (info !=  null && info.stream_name != null && !info.stream_name.equals("Twitch")) {
-                emote.setStream(info.stream_name);
-                addStreamSubmenu(emote);
-            }
+            addItem("", TwitchEmotesApi.getEmoteType(emote));
         }
 
         addSeparator();
         addItem("emoteDetails", Language.getString("emoteCm.showDetails"));
         
         addSeparator();
-        addItem("ignoreEmote", Language.getString("emoteCm.ignore"));
+        if (!emoteManager.isEmoteIgnored(emote, 0)) {
+            addItem("ignoreEmote", Language.getString("emoteCm.ignore"));
+        }
+        else {
+            addItem("ignoreEmote", Language.getString("emoteCm.changeIgnore"));
+        }
         if (emote.subType != Emoticon.SubType.CHEER
                 && ((emote.emoteset != null && !emote.emoteset.isEmpty())
                 || emote.type != Emoticon.Type.TWITCH)) {
-            if (!emote.hasStreamRestrictions()) {
-                if (emoteManager.isFavorite(emote)) {
-                    addItem("unfavoriteEmote", Language.getString("emoteCm.unfavorite"));
-                } else {
-                    addItem("favoriteEmote", Language.getString("emoteCm.favorite"));
-                }
+            if (emoteManager.isFavorite(emote)) {
+                addItem("unfavoriteEmote", Language.getString("emoteCm.unfavorite"));
+            }
+            else {
+                addItem("favoriteEmote", Language.getString("emoteCm.favorite"));
             }
         }
         

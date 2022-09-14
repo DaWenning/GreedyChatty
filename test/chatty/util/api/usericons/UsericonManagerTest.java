@@ -4,6 +4,7 @@ package chatty.util.api.usericons;
 import chatty.Room;
 import chatty.User;
 import chatty.gui.MainGui;
+import chatty.util.irc.IrcBadges;
 import chatty.util.settings.Setting;
 import chatty.util.settings.Settings;
 import java.util.ArrayList;
@@ -58,7 +59,7 @@ public class UsericonManagerTest {
     
     private void testThirdParty(UsericonManager m, Set<String> usernames, Set<String> userids, User user, boolean... results) {
         List<Usericon> thirdParty = setThirdParty(m, usernames, userids);
-        List<Usericon> badges = m.getBadges(new HashMap<>(), user, false, null, false);
+        List<Usericon> badges = m.getBadges(IrcBadges.parse(null), user, null, false, null, false);
         for (int i=0;i<results.length;i++) {
             if (results[i]) {
                 assertTrue("Badge "+i, badges.contains(thirdParty.get(i)));
@@ -72,10 +73,11 @@ public class UsericonManagerTest {
     private List<Usericon> setThirdParty(UsericonManager m, Set<String> usernames, Set<String> userids) {
         String url = MainGui.class.getResource("star.png").toString();
         List<Usericon> thirdParty = new ArrayList<>();
-        thirdParty.add(UsericonFactory.createThirdParty("test", "1", url, "Title", null, null, usernames, userids, ""));
-        thirdParty.add(UsericonFactory.createThirdParty("test", "2", url, "Title", null, null, null, userids, ""));
-        thirdParty.add(UsericonFactory.createThirdParty("test", "3", url, "Title", null, null, usernames, null, ""));
-        thirdParty.add(UsericonFactory.createThirdParty("test", "4", url, "Title", null, null, null, null, ""));
+        // Passing same url for both sizes, this may need to be changed if it becomes important for the test
+        thirdParty.add(UsericonFactory.createThirdParty("test", "1", url, url, "Title", null, null, usernames, userids, ""));
+        thirdParty.add(UsericonFactory.createThirdParty("test", "2", url, url, "Title", null, null, null, userids, ""));
+        thirdParty.add(UsericonFactory.createThirdParty("test", "3", url, url, "Title", null, null, usernames, null, ""));
+        thirdParty.add(UsericonFactory.createThirdParty("test", "4", url, url, "Title", null, null, null, null, ""));
         m.setThirdPartyIcons(thirdParty);
         return thirdParty;
     }

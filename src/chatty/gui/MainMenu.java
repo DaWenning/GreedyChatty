@@ -137,6 +137,7 @@ public class MainMenu extends JMenuBar {
         ignored = addItem(view,"dialog.ignoredMessages",IGNORED_LABEL);
         view.addSeparator();
         addItem(view, "dialog.eventLog");
+        addItem(view, "window.toggleUserlist");
         view.addSeparator();
         addItem(view, "dialog.search");
         view.addSeparator();
@@ -477,7 +478,7 @@ public class MainMenu extends JMenuBar {
             JLabel label = current.get(id);
             if (label == null) {
                 label = new JLabel();
-                int iconSize = getGraphics().getFontMetrics(label.getFont()).getHeight();
+                int iconSize = label.getFontMetrics(label.getFont()).getHeight();
                 ImageIcon icon = GuiUtil.getScaledIcon(GuiUtil.getIcon(this, imageFile), iconSize, iconSize);
                 label.setIcon(icon);
                 label.setIconTextGap(0);

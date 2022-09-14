@@ -6,12 +6,15 @@ import chatty.User;
 import chatty.gui.GuiUtil;
 import chatty.util.api.usericons.Usericon.Type;
 import chatty.gui.MainGui;
+import chatty.util.StringUtil;
+import chatty.util.irc.IrcBadges;
 import chatty.util.irc.MsgTags;
 import chatty.util.settings.Settings;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -27,6 +30,7 @@ public class UsericonManager {
     private static final Logger LOGGER = Logger.getLogger(UsericonManager.class.getName());
     
     private static final String SETTING_NAME = "customUsericons";
+    private static final String SETTING_NAME_HIDDEN_BADGES = "hiddenUsericons";
     
     /**
      * The default icons are the fallback ones loaded from the JAR and the ones
@@ -41,6 +45,8 @@ public class UsericonManager {
      */
     private final List<Usericon> customIcons = new ArrayList<>();
     
+    private final List<Usericon> hiddenBadges = new ArrayList<>();
+    
     private final List<Usericon> thirdParty = new ArrayList<>();
     
     private final Map<String, Usericon> channelLogos = new HashMap<>();
@@ -53,20 +59,24 @@ public class UsericonManager {
     
     public synchronized void addDefaultIcons(List<Usericon> icons) {
         for (Usericon icon : icons) {
-            if (icon != null && icon.image != null) {
-                // Remove icon if it already exists, so it can actually be
-                // updated if necessary.
-                if (defaultIcons.contains(icon)) {
-                    defaultIcons.remove(icon);
-                }
-                defaultIcons.add(icon);
-            }
+            addDefaultIcon(icon);
         }
 //        debug();
     }
     
+    public synchronized void addDefaultIcon(Usericon icon) {
+        if (icon != null) {
+            // Remove icon if it already exists, so it can actually be
+            // updated if necessary.
+            if (defaultIcons.contains(icon)) {
+                defaultIcons.remove(icon);
+            }
+            defaultIcons.add(icon);
+        }
+    }
+    
     public synchronized void setThirdPartyIcons(List<Usericon> icons) {
-        LOGGER.info(String.format("Added %d third-party badges", icons.size()));
+        LOGGER.info(String.format(Locale.ROOT, "Added %d third-party badges", icons.size()));
         this.thirdParty.clear();
         this.thirdParty.addAll(icons);
     }
@@ -114,6 +124,7 @@ public class UsericonManager {
         GuiUtil.edt(() -> {
             addFallbackIcons();
             loadFromSettings();
+            loadHiddenBadgesFromSettings();
         });
     }
     
@@ -131,6 +142,7 @@ public class UsericonManager {
         addFallbackIcon(Usericon.Type.GLOBAL_MOD, "icon_globalmod.png");
         addFallbackIcon(Usericon.Type.BOT, "icon_bot.png");
         addFallbackIcon(Usericon.Type.HL, "icon_hl.png");
+        addFallbackIcon(Usericon.Type.FIRSTMSG, "icon_firstmsg.png");
 //        addFallbackIcon(Usericon.Type.RESUB, "icon_sub.png");
 //        addFallbackIcon(Usericon.Type.NEWSUB, "icon_sub.png");
 //        List<Usericon> test = new ArrayList<>();
@@ -151,10 +163,20 @@ public class UsericonManager {
         return new ArrayList<>(customIcons);
     }
     
+    public synchronized List<Usericon> getHiddenBadgesData() {
+        return new ArrayList<>(hiddenBadges);
+    }
+    
     public synchronized void setCustomData(List<Usericon> data) {
         customIcons.clear();
         customIcons.addAll(data);
         saveToSettings();
+    }
+    
+    public synchronized void setHiddenBadgesData(List<Usericon> data) {
+        hiddenBadges.clear();
+        hiddenBadges.addAll(data);
+        saveHiddenBadgesToSettings();
     }
     
     public synchronized Set<String> getTwitchBadgeTypes() {
@@ -168,8 +190,8 @@ public class UsericonManager {
         return result;
     }
     
-    public synchronized List<Usericon> getBadges(Map<String, String> badgesDef,
-            User user, boolean botBadgeEnabled, MsgTags tags, boolean channelLogo) {
+    public synchronized List<Usericon> getBadges(IrcBadges badgesDef,
+            User user, User localUser, boolean botBadgeEnabled, MsgTags tags, boolean channelLogo) {
         List<Usericon> icons = getTwitchBadges(badgesDef, user, tags);
         if (user.isBot() && botBadgeEnabled) {
             Usericon icon = getIcon(Usericon.Type.BOT, null, null, user, tags);
@@ -185,19 +207,27 @@ public class UsericonManager {
                 icons.add(0, icon);
             }
         }
+        if (tags != null && tags.isTrue("first-msg")
+                && localUser != null && localUser.hasChannelModeratorRights()) {
+            Usericon icon = getIcon(Usericon.Type.FIRSTMSG, null, null, user, tags);
+            if (icon != null) {
+                icons.add(0, icon);
+            }
+        }
         if (channelLogo && channelLogos.containsKey(user.getChannel())) {
             icons.add(0, channelLogos.get(user.getChannel()));
         }
         return icons;
     }
 
-    private List<Usericon> getTwitchBadges(Map<String, String> badgesDef, User user, MsgTags tags) {
+    private List<Usericon> getTwitchBadges(IrcBadges badgesDef, User user, MsgTags tags) {
         if (badgesDef == null || badgesDef.isEmpty()) {
             return new ArrayList<>();
         }
         List<Usericon> result = new ArrayList<>();
-        for (String id : badgesDef.keySet()) {
-            String value = badgesDef.get(id);
+        for (int i=0; i<badgesDef.size(); i++) {
+            String id = badgesDef.getId(i);
+            String value = badgesDef.getVersion(i);
             Usericon icon = getIcon(Type.TWITCH, id, value, user, tags);
             if (icon != null) {
                 result.add(icon);
@@ -231,15 +261,15 @@ public class UsericonManager {
                 //System.out.println("A:"+" "+type+" "+icon.type+" "+iconsMatchesAdvancedType(icon, type, id, version)+" "+icon);
                 if (iconsMatchesAdvancedType(icon, type, id, version) && iconMatchesUser(icon, user, tags)) {
                     if (icon.removeBadge) {
-                        return null;
-                    } else if (icon.image != null) {
+                        return icon;
+                    } else if (icon.hasRegularImage) {
                         return icon;
                     } else if (icon.fileName.equalsIgnoreCase("$ffz")) {
                         // If fileName is a reference, then check if an icon
                         // for that exists (only really applicable for FFZ Mod
                         // Icon at the moment)
                         Usericon refIcon = getDefaultIcon(type, id, version, user, Usericon.SOURCE_FFZ);
-                        if (refIcon != null && refIcon.image != null) {
+                        if (refIcon != null) {
                             return refIcon;
                         }
                     } else if (icon.fileName.equalsIgnoreCase("$twitch")) {
@@ -248,16 +278,21 @@ public class UsericonManager {
                         // it should be replaced only when that happens.
                         
                         Usericon refIcon = getDefaultIcon(type, id, version, user, Usericon.SOURCE_TWITCH2);
-                        if (refIcon != null && refIcon.image != null) {
+                        if (refIcon != null) {
                             return refIcon;
                         }
                     } else if (icon.fileName.equalsIgnoreCase("$default")) {
                         Usericon refIcon = getDefaultIcon(type, id, version, user, Usericon.SOURCE_ANY);
-                        if (refIcon != null && refIcon.image != null) {
+                        if (refIcon != null) {
                             return refIcon;
                         }
                     }
                 }
+            }
+        }
+        for (Usericon icon : hiddenBadges) {
+            if (iconsMatchesAdvancedType(icon, type, id, version)) {
+                return icon;
             }
         }
         return getDefaultIcon(type, id, version, user, Usericon.SOURCE_ANY);
@@ -307,7 +342,7 @@ public class UsericonManager {
         if (customUsericonsEnabled()) {
             for (Usericon icon : customIcons) {
                 if (icon.type == Type.ADDON && iconMatchesUser(icon, user, tags)
-                        && icon.image != null) {
+                        && icon.hasRegularImage) {
                     insert(icons, icon);
                     if (icon.stop) {
                         break;
@@ -375,13 +410,13 @@ public class UsericonManager {
      */
     private boolean iconMatchesUser(Usericon icon, User user, MsgTags tags) {
         if (icon.badgeTypeRestriction.id != null) {
-            Map<String, String> badges = user.getTwitchBadges();
+            IrcBadges badges = user.getTwitchBadges();
             String id = icon.badgeTypeRestriction.id;
             String version = icon.badgeTypeRestriction.version;
             if (badges == null) {
                 return false;
             }
-            if (!badges.containsKey(id)) {
+            if (!badges.hasId(id)) {
                 return false;
             }
             if (version != null && !badges.get(id).equals(version)) {
@@ -487,12 +522,36 @@ public class UsericonManager {
         LOGGER.info("Usericons: Loaded "+count+"/"+entriesToLoad.size());
     }
     
+    private synchronized void loadHiddenBadgesFromSettings() {
+        List<List> entriesToLoad = settings.getList(SETTING_NAME_HIDDEN_BADGES);
+        hiddenBadges.clear();
+        int count = 0;
+        for (List entryToLoad : entriesToLoad) {
+            Usericon icon = listToEntryHiddenBadges(entryToLoad);
+            if (icon != null) {
+                hiddenBadges.add(icon);
+                count++;
+            } else {
+                LOGGER.warning("Hidden Usericons: Couldn't load entry "+entryToLoad);
+            }
+        }
+        LOGGER.info("Hidden Usericons: Loaded "+count+"/"+entriesToLoad.size());
+    }
+    
     private synchronized void saveToSettings() {
         List<List> entriesToSave = new ArrayList<>();
         for (Usericon iconToSave : customIcons) {
             entriesToSave.add(entryToList(iconToSave));
         }
         settings.putList(SETTING_NAME, entriesToSave);
+    }
+    
+    private synchronized void saveHiddenBadgesToSettings() {
+        List<List> entriesToSave = new ArrayList<>();
+        for (Usericon iconToSave : hiddenBadges) {
+            entriesToSave.add(entryToListHiddenBadges(iconToSave));
+        }
+        settings.putList(SETTING_NAME_HIDDEN_BADGES, entriesToSave);
     }
     
     private List entryToList(Usericon icon) {
@@ -503,6 +562,13 @@ public class UsericonManager {
         list.add(icon.channelRestriction);
         list.add(icon.getIdAndVersion());
         list.add(icon.positionValue);
+        return list;
+    }
+    
+    private List entryToListHiddenBadges(Usericon icon) {
+        List list = new ArrayList();
+        list.add(icon.type.id);
+        list.add(icon.getIdAndVersion());
         return list;
     }
     
@@ -525,12 +591,34 @@ public class UsericonManager {
             return null;
         }
     }
+    
+    private Usericon listToEntryHiddenBadges(List list) {
+        Type type = Type.getTypeFromId(((Number)list.get(0)).intValue());
+        String idVersion = (String)list.get(1);
+        return UsericonFactory.createCustomIcon(type, idVersion, "", "", "", "");
+    }
  
     public synchronized void debug() {
-        LOGGER.info(String.format("Default usericons (%d): %s",
+        LOGGER.info(String.format(Locale.ROOT, "Default usericons (%d): %s",
                 defaultIcons.size(), defaultIcons));
-        LOGGER.info(String.format("Custom usericons (%d): %s",
+        LOGGER.info(String.format(Locale.ROOT, "Custom usericons (%d): %s",
                 customIcons.size(), customIcons));
+    }
+
+    public synchronized boolean hideBadge(Usericon usericon) {
+        boolean alreadyHidden = false;
+        for (Usericon icon : hiddenBadges) {
+            if (iconsMatchesAdvancedType(icon, usericon.type, usericon.badgeType.id, usericon.badgeType.version)) {
+                alreadyHidden = true;
+            }
+        }
+        if (!alreadyHidden) {
+            Usericon customUsericon = UsericonFactory.createCustomIcon(usericon.type, usericon.badgeType.id, "", "", "", "");
+            hiddenBadges.add(0, customUsericon);
+            saveHiddenBadgesToSettings();
+            return true;
+        }
+        return false;
     }
     
 }

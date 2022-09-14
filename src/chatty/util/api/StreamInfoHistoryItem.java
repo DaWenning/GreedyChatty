@@ -1,6 +1,7 @@
 
 package chatty.util.api;
 
+import chatty.util.MiscUtil;
 import chatty.util.api.StreamTagManager.StreamTag;
 import chatty.util.api.StreamInfo.StreamType;
 import java.util.List;
@@ -22,8 +23,8 @@ public class StreamInfoHistoryItem {
     private final String title;
     private final StreamType streamType;
     private final List<StreamTag> community;
-    private final long streamDuration;
-    private final long streamDurationWithPicnic;
+    private final long streamStartTime;
+    private final long streamStartTimeWithPicnic;
     
     public StreamInfoHistoryItem(long time) {
         this.viewers = -1;
@@ -35,8 +36,8 @@ public class StreamInfoHistoryItem {
         this.title = "Stream offline";
         this.streamType = null;
         this.community = null;
-        this.streamDuration = -1;
-        this.streamDurationWithPicnic = -1;
+        this.streamStartTime = -1;
+        this.streamStartTimeWithPicnic = -1;
     }
     
     public StreamInfoHistoryItem(long time, int viewers, String status, String game,
@@ -44,19 +45,19 @@ public class StreamInfoHistoryItem {
             long startedTimeWithPicnic) {
         this.viewers = viewers;
         this.status = status;
-        this.game = game;
+        this.game = MiscUtil.intern(game);
         this.online = true;
-        this.statusAndGame = status+game;
+        this.statusAndGame = MiscUtil.intern(status+game);
         this.time = time;
         if (status == null) {
             title = "No stream title set";
         } else {
-            title = status;
+            title = MiscUtil.intern(status);
         }
         this.streamType = streamType;
         this.community = community;
-        this.streamDuration = startedTime;
-        this.streamDurationWithPicnic = startedTimeWithPicnic;
+        this.streamStartTime = startedTime;
+        this.streamStartTimeWithPicnic = startedTimeWithPicnic;
     }
     
     public int getViewers() {
@@ -106,12 +107,12 @@ public class StreamInfoHistoryItem {
         return streamType;
     }
     
-    public long getStreamDuration() {
-        return streamDuration;
+    public long getStreamStartTime() {
+        return streamStartTime;
     }
     
-    public long getStreamDurationWithPicnic() {
-        return streamDurationWithPicnic;
+    public long getStreamStartTimeWithPicnic() {
+        return streamStartTimeWithPicnic;
     }
     
 }

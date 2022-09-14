@@ -51,6 +51,7 @@ public class NotificationSettings extends SettingsPanel {
     private final EditorStringSetting nCommand;
     
     private final PathSetting soundsPath;
+    private final ComboStringSetting soundFiles;
     
     private final JLabel filesResult = new JLabel();
     
@@ -140,6 +141,9 @@ public class NotificationSettings extends SettingsPanel {
         d.addLongSetting("nMaxDisplayTime", nMaxDisplayTime);
         notificationSettings.add(nMaxDisplayTime,
                 d.makeGbc(3, 2, 1, 1, GridBagConstraints.WEST));
+        
+        notificationSettings.add(d.addSimpleBooleanSetting("nKeepOpenOnHover"),
+                SettingsDialog.makeGbc(2, 3, 2, 1, GridBagConstraints.WEST));
 
         notificationSettings.add(new JLabel("Command:"), d.makeGbc(0, 4, 1, 1, GridBagConstraints.EAST));
 
@@ -221,24 +225,76 @@ public class NotificationSettings extends SettingsPanel {
         //---------------
         JPanel devicePanel = new JPanel();
         devicePanel.add(new JLabel("Output Device: "));
-        
-        Map<String, String> devicePresets = new HashMap<>();
-        devicePresets.put("", "<default>");
-        for (String dev : Sound.getDeviceNames()) {
-            devicePresets.put(dev, dev);
-        }
-        final ComboStringSetting device = new ComboStringSetting(devicePresets);
-        device.addActionListener(new ActionListener() {
-
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                Sound.setDeviceName(device.getSettingValue());
-            }
-        });
+        DialogComboSetting device = new DialogComboSetting(d,
+                () -> {
+                    Map<String, String> devicePresets = new HashMap<>();
+                    devicePresets.put("", "<default>");
+                    for (String dev : Sound.getDeviceNames()) {
+                        devicePresets.put(dev, dev);
+                    }
+                    return devicePresets;
+                },
+                value -> {
+                    if (value.isEmpty()) {
+                        return "<default>";
+                    }
+                    return value;
+                });
+        device.addSettingChangeListener(s -> Sound.setDeviceName(s.getSettingValue()));
         d.addStringSetting("soundDevice", device);
         devicePanel.add(device);
         gbc = d.makeGbc(0, 4, 2, 1);
         soundSettings.add(devicePanel, gbc);
+        
+        //--------------------------
+        // Sound Test
+        //--------------------------
+        JPanel soundTestPanel = new JPanel(new GridBagLayout());
+        soundTestPanel.setBorder(BorderFactory.createTitledBorder("Test sounds / Output Device"));
+        
+        SliderLongSetting volumeSlider = new SliderLongSetting(JSlider.HORIZONTAL, 0, 100, 0);
+        volumeSlider.setMajorTickSpacing(10);
+        volumeSlider.setMinorTickSpacing(5);
+        volumeSlider.setPaintTicks(true);
+        volumeSlider.setSettingValue(50L);
+        
+        soundFiles = new ComboStringSetting(new String[]{});
+        
+        JButton playSound = new JButton("Play");
+        playSound.addActionListener(new ActionListener() {
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    String file = soundFiles.getSettingValue();
+                    if (file != null && !file.isEmpty()) {
+                        long volume = volumeSlider.getSettingValue();
+                        Sound.play(soundsPath.getCurrentPath().resolve(file), volume, "test", -1);
+                    }
+                }
+                catch (Exception ex) {
+                    GuiUtil.showNonModalMessage(d, "Error Playing Sound",
+                            ex.toString(),
+                            JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+        
+        soundTestPanel.add(new JLabel("File:"),
+                d.makeGbc(0, 0, 1, 1, GridBagConstraints.EAST));
+        soundTestPanel.add(soundFiles,
+                d.makeGbc(1, 0, 1, 1, GridBagConstraints.WEST));
+        soundTestPanel.add(new JLabel("Volume:"),
+                d.makeGbc(0, 1, 1, 1, GridBagConstraints.EAST));
+        soundTestPanel.add(playSound,
+                d.makeGbc(2, 0, 1, 1, GridBagConstraints.WEST));
+        soundTestPanel.add(volumeSlider,
+                d.makeGbc(1, 1, 2, 1, GridBagConstraints.WEST));
+        
+        gbc = d.makeGbc(0, 10, 3, 1);
+        gbc.insets = new Insets(20, 20, 5, 20);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        soundSettings.add(soundTestPanel, gbc);
         
         //--------------------------
         // Info
@@ -353,6 +409,10 @@ public class NotificationSettings extends SettingsPanel {
             }
             Arrays.sort(fileNames);
             editor.setSoundFiles(path, fileNames);
+            soundFiles.clear();
+            for (String fileName : fileNames) {
+                soundFiles.add(fileName);
+            }
         }
         if (showMessage) {
             JOptionPane.showMessageDialog(this, resultText+warningText);

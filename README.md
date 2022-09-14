@@ -42,7 +42,7 @@ License Information
 Chatty, as a whole, is released under the GPLv3 or later (see included
 `LICENSE` file).
 
-    Copyright (C) 2017-2020  tduva and contributors
+    Copyright (C) 2017-2022  tduva and contributors
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -123,6 +123,13 @@ External Libraries
     (for the license text see the APACHE_LICENSE file
 	or <http://www.apache.org/licenses/LICENSE-2.0>).
 
+* WebPDecoderJN:
+  * Files under `assets/lib/`: `WebPDecoderJN-*.jar`
+  * Website: <https://github.com/tduva/WebPDecoderJN>
+  * License: "3-Clause BSD"
+    (see <https://github.com/tduva/WebPDecoderJN/blob/main/COPYING>)
+  * Requires JNA
+
 * Additional external/modified libraries integrated under `src/chatty/` have license/source
   information in the file header
 
@@ -138,7 +145,7 @@ Images / Other
 
 * Misc Icons from the Tango Icon Theme:
   * Files (in various folders): `list-add.png, list-remove.png, view-refresh.png,
-		help-browser.png, preferences-system.png,
+		help-browser.png, preferences-system.png, search.png,
 		dialog-warning.png, go-down.png, go-up.png, go-next.png,
 		go-previous.png, go-home.png, go-web.png,
 		image-icon.png, commandline.png, edit-copy.png, sort.png,
@@ -157,9 +164,15 @@ Images / Other
 
 * Robot Icon by Yusuke Kamiyamane:
   * File (in various folders): `icon_bot.png`
-  * Source: https://www.iconfinder.com/icons/46205/robot_icon
+  * Source: <https://www.iconfinder.com/icons/46205/robot_icon>
   * License: CC-BY 3.0
-	(http://creativecommons.org/licenses/by/3.0/)
+	(<http://creativecommons.org/licenses/by/3.0/>)
+
+* Announcement Icon Material Design (slightly modified):
+  * Files: `announcement*.png`
+  * Source: <https://materialdesignicons.com/icon/bullhorn>
+  * License: Apache 2.0
+    (<https://www.apache.org/licenses/LICENSE-2.0>)
 
 * Twitter Emoji Images:
   * Files: `gui/emoji/twemoji/*`
@@ -184,6 +197,11 @@ Images / Other
   * Source: https://github.com/joypixels/emojione/blob/master/emoji.json
   * License: MIT
 	(<https://opensource.org/licenses/MIT>)
+  * Now outdated, seems to be no longer updated
+
+* Emoji Metadata supplemented by:
+  * Source: <https://unicode.org/Public/emoji/14.0/emoji-test.txt>
+  * License: <https://www.unicode.org/license.txt>
 
 * Example Sounds by tduva:
   * Files: `assets/sounds/*`

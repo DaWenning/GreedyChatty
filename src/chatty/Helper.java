@@ -169,6 +169,7 @@ public class Helper {
     public static final Pattern CHANNEL_PATTERN = Pattern.compile("(?i)^#?"+USERNAME_REGEX+"$");
     public static final Pattern CHATROOM_PATTERN = Pattern.compile("(?i)^#?chatrooms:[0-9a-z-:]+$");
     public static final Pattern STREAM_PATTERN = Pattern.compile("(?i)^"+USERNAME_REGEX+"$");
+    public static final Pattern WHISPER_PATTERN = Pattern.compile("(?i)^\\$"+USERNAME_REGEX+"$");
     private static final Pattern CHANNEL_URL_PATTERN = Pattern.compile("(?:https?://)?(?:www\\.)?twitch\\.tv/("+USERNAME_REGEX+")[/a-z]*");
     
     /**
@@ -236,6 +237,14 @@ public class Helper {
         try {
             return channel.startsWith("#") && CHATROOM_PATTERN.matcher(channel).matches();
         } catch (Exception ex) {
+            return false;
+        }
+    }
+    
+    public static boolean isValidWhisperChannel(String channel) {
+        try {
+            return WHISPER_PATTERN.matcher(channel).matches();
+        } catch (PatternSyntaxException | NullPointerException ex) {
             return false;
         }
     }
@@ -818,31 +827,6 @@ public class Helper {
         return null;
     }
     
-    private static final Map<String, String> EMPTY_BADGES = Collections.unmodifiableMap(new LinkedHashMap<String, String>());
-    
-    /**
-     * Parses the badges tag. The resulting map is unmodifiable.
-     * 
-     * @param data
-     * @return 
-     */
-    public static Map<String, String> parseBadges(String data) {
-        if (data == null || data.isEmpty()) {
-            return EMPTY_BADGES;
-        }
-        LinkedHashMap<String, String> result = new LinkedHashMap<>();
-        String[] badges = data.split(",");
-        for (String badge : badges) {
-            String[] split = badge.split("/");
-            if (split.length == 2) {
-                String id = split[0];
-                String version = split[1];
-                result.put(id, version);
-            }
-        }
-        return Collections.unmodifiableMap(result);
-    }
-    
     public static short parseShort(String input, short defaultValue) {
         try {
             return Short.parseShort(input);
@@ -951,7 +935,11 @@ public class Helper {
     public static void addUserParameters(User user, String msgId, String autoModMsgId, Parameters parameters) {
         if (msgId != null) {
             parameters.put("msg-id", msgId);
-            parameters.put("msg", user.getMessageText(msgId));
+            User.TextMessage m = user.getMessage(msgId);
+            if (m != null) {
+                parameters.put("msg", m.text);
+                parameters.put("msg-time", String.valueOf(m.getTime()));
+            }
         }
         if (autoModMsgId != null) {
             parameters.put("automod-msg-id", autoModMsgId);
@@ -1031,6 +1019,15 @@ public class Helper {
         }
     }
     
+    public static void setDefaultLocale(String input) {
+        if (!StringUtil.isNullOrEmpty(input)) {
+            Locale locale = Locale.forLanguageTag(input);
+            Locale.setDefault(locale);
+            LOGGER.info(String.format("[Locale] Set to %s [%s]",
+                    locale.getDisplayName(), locale.toLanguageTag()));
+        }
+    }
+    
     public static String getErrorMessageWithCause(Throwable ex) {
         Throwable cause = ex.getCause();
         if (cause != null) {
@@ -1070,7 +1067,7 @@ public class Helper {
                 b.append(String.format("* Backup written to %s\n",
                         r.backupPath));
             }
-            else if (r.writeError != null) {
+            else if (r.backupError != null) {
                 b.append(String.format("* Backup failed: %s\n",
                         getErrorMessageCompact(r.backupError)));
             }

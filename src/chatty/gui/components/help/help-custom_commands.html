@@ -20,6 +20,7 @@
                 <li><a href="#anonymous-custom-commands">Anonymous Custom Commands</a></li>
                 <li><a href="#chain-commands">Chaining Commands</a></li>
                 <li><a href="#foreach">Foreach</a></li>
+                <li><a href="#runin">Run command in specific channel</a></li>
             </ul>
         </li>
         <li>
@@ -115,6 +116,10 @@
     <p>The <a href="help.html#commands-foreach">/foreach command</a> can be used
         to run the same command for each entry of a space-separated list, for
         example a list of channels from the <code>$1-</code> replacement.</p>
+    
+    <h3><a name="runin">Run command in specific channel</a></h3>
+    <p>The <a href="help.html#commands-runin">/runin command</a> can be used
+        to run a command in a specific open channel.</p>
     
     <h2><a name="replacements">Replacements</a></h2>
     <ul>
@@ -271,7 +276,7 @@
         </tr>
         <!-- User Context Menu -->
         <tr>
-            <th rowspan="5">User Context Menu</th>
+            <th rowspan="6">User Context Menu</th>
             <td><code>1</code></td>
             <td>Name of the user</td>
         </tr>
@@ -284,6 +289,14 @@
             <td>Message text of the selected message (depending on the line in
                 chat you opened the User Contex Menu from, not available for
                 your own messages)</td>
+        </tr>
+        <tr>
+            <td><code>msg-time</code></td>
+            <td>Message time of the selected message (depending on the line in
+                chat you opened the User Contex Menu from, not available for
+                your own messages), as milliseconds since
+                1970-01-01 00:00:00 UTC, intended to be used with <code>$datetime()</code>,
+                e.g. <code>$datetime(datetime,,,$(msg-time))</code></td>
         </tr>
         <tr>
             <td><code>msg-id</code></td>
@@ -299,7 +312,7 @@
         </tr>
         <!-- User Dialog -->
         <tr>
-            <th rowspan="7">User Dialog</th>
+            <th rowspan="8">User Dialog</th>
             <td><em>All from User Context Menu</em></td>
             <td>See above</td>
         </tr>
@@ -312,6 +325,14 @@
             <td>Message text of the selected message (<code>&gt;</code> in front
                 of message, depending on the line in chat you opened it from,
                 not available for your own messages)</td>
+        </tr>
+        <tr>
+            <td><code>msg-time</code></td>
+            <td>Message time of the selected message (<code>&gt;</code> in front
+                of message, depending on the line in chat you opened it from,
+                not available for your own messages), as milliseconds since
+                1970-01-01 00:00:00 UTC, intended to be used with <code>$datetime()</code>,
+                e.g. <code>$datetime(datetime,,,$(msg-time))</code></td>
         </tr>
         <tr>
             <td><code>msg-id</code></td>
@@ -395,6 +416,9 @@
         <li><code>user-id</code> - The Twitch ID of the user (if available)</li>
         <li><code>twitch-badges</code> - A textual representation of the Twitch badges (if available)</li>
         <li><code>twitch-badge-info</code> - Another textual representation of the Twitch badges (if available)</li>
+        <li><code>user-stream</code> - The name of the stream the user talked in</li>
+        <li><code>user-stream-id</code> - The id of the stream the user talked in</li>
+        <li><code>user-channel</code> - The name of the channel the user talked in (with leading # if applicable)</li>
     </ul>
     
     <h3>Pre-defined Parameters Example</h3>
@@ -506,11 +530,26 @@
             between 0 and what is the first parameter.</dd>
         
         <dt><code>$calc(&lt;simple math expression&gt;)</code></dt>
-        <dd>Limited support for performing calculations.</dd>
+        <dd>Limited support for performing calculations, with binary operators
+            (<code>* / % + -</code>) and functions (<code>sqrt() sin() cos() tan()</code>).</dd>
         <dd><em>Example:</em> <code>//echo $calc(2^3) $calc( (3+4\) / 2)</code>
             when entered into the inputbox returns <code>8 3.5</code> (note the
             parentheses in the second, as well as how the closing parenthesis
             needs to be escaped).</dd>
+        <dd><em>Example:</em> <code>//echo $calc($"sqrt(81) * (1 + 4/2)")</code> outputs <code>27</code>
+            (this uses <code>$" "</code> to specify <a href="#escaping">literal text</a>
+            instead of escaping the parenthesis with a backslash).</dd>
+        
+        <dt><code>$round(&lt;number&gt;,[numDecimalPlaces],[roundingMode],[minNumDecimalPlaces])</code></dt>
+        <dd>Round a number to the given amount of decimal places,
+            with a <a href="https://docs.oracle.com/javase/7/docs/api/java/math/RoundingMode.html">rounding mode</a>
+            of empty (half-up), <code>ceil</code>, <code>floor</code>,
+            <code>up</code>, <code>down</code> or <code>half-down</code>, with
+            the given number of minimum decimal places (fills with 0).</dd>
+        <dd><em>Example:</em> <code>//echo $round(1.335)</code> outputs <code>1</code></dd>
+        <dd><em>Example:</em> <code>//echo $round(1.335,2)</code> outputs <code>1.34</code></dd>
+        <dd><em>Example:</em> <code>//echo $round(345.5,3,floor,3)</code> outputs <code>345.500</code> (fills up to 3 decimal places)</dd>
+        <dd><em>Example:</em> <code>//echo $round(2.565,2,,2)</code> outputs <code>2.57</code> (uses default rounding mode)</dd>
         
         <dt><code>$urlencode(&lt;input&gt;)</code></dt>
         <dd>Uses <a href="https://docs.oracle.com/javase/8/docs/api/java/net/URLEncoder.html#encode-java.lang.String-java.lang.String-">UrlEncoder.encode()</a>
@@ -537,12 +576,13 @@
         <dd><em>Example:</em> <code>$input()</code></dd>
         <dd><em>Example:</em> <code>$input(Enter a number please)</code></dd>
         
-        <dt><code>$datetime([format],[timezone],[locale])</code></dt>
+        <dt><code>$datetime([format],[timezone],[locale],[unix time])</code></dt>
         <dd>Outputs the current date/time. You can optionally give a format
             pattern (based on <a href="https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html#patterns">DateTimeFormatter</a>),
             a timezone (based on <a href="https://docs.oracle.com/javase/8/docs/api/java/time/ZoneId.html">ZoneId</a>,
             although something like "New York" should also work) and a locale
-            (a language tag such as "en").</dd>
+            (a language tag such as "en"). The optional unix time parameter must
+            be in milliseconds.</dd>
         <dd>Predefined formats:
             <ul style="margin-top:0">
                 <li>Short: <code>date</code>, <code>time</code>, <code>datetime</code></li>
@@ -588,6 +628,11 @@
                 <dd>(Custom format, <code>,</code> escaped since it normally
                     separates function parameters, empty timezone in order to be
                     able to specify locale.)</dd>
+                
+                <dt><code>$datetime(datetime2,Berlin,,1646937275000)</code></dt>
+                <dd><code>2022-03-10 19:34:35 MEZ GMT+0100</code></dd>
+                <dd>(Preset format, with timezone, no locale, with a time
+                    specified in milliseconds since 1970-01-01 00:00:00 UTC.)</dd>
             </dl>
     </dl>
     

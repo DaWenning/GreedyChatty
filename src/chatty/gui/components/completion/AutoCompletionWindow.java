@@ -277,7 +277,10 @@ public class AutoCompletionWindow {
             containingWindow.removeComponentListener(componentListener);
         }
         textField.removeFocusListener(focusListener);
-        infoWindow = null;
+        if (infoWindow != null) {
+            infoWindow.dispose();
+            infoWindow = null;
+        }
     }
     
     /**
@@ -549,7 +552,7 @@ public class AutoCompletionWindow {
         }
         
         private static String enc(String input) {
-            return Helper.htmlspecialchars_encode(input);
+            return Helper.htmlspecialchars_encode(input).replace(" ", "&nbsp;");
         }
         
         public void setFont(Font font) {

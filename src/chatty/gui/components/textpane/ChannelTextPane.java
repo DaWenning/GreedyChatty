@@ -29,13 +29,13 @@ import chatty.util.RepeatMsgHelper;
 import chatty.util.ReplyManager;
 import chatty.util.RingBuffer;
 import chatty.util.StringUtil;
+import chatty.util.Timestamp;
 import chatty.util.api.CheerEmoticon;
 import chatty.util.api.Emoticon;
-import chatty.util.api.Emoticon.EmoticonImage;
-import chatty.util.api.Emoticon.EmoticonUser;
-import chatty.util.api.Emoticon.ImageType;
 import chatty.util.api.Emoticons;
 import chatty.util.api.Emoticons.TagEmotes;
+import chatty.util.api.CachedImage;
+import chatty.util.api.CachedImage.ImageType;
 import chatty.util.api.pubsub.ModeratorActionData;
 import chatty.util.colors.ColorCorrectionNew;
 import chatty.util.colors.ColorCorrector;
@@ -56,7 +56,6 @@ import java.awt.event.MouseMotionListener;
 import java.awt.image.BufferedImage;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.text.SimpleDateFormat;
 import java.util.Map.Entry;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -71,6 +70,10 @@ import javax.swing.event.CaretEvent;
 import javax.swing.event.CaretListener;
 import javax.swing.text.*;
 import javax.swing.text.html.HTML;
+import chatty.util.api.CachedImage.CachedImageUser;
+import chatty.util.api.IgnoredEmotes;
+import chatty.util.api.usericons.UsericonFactory;
+import chatty.util.api.usericons.UsericonManager;
 
 
 /**
@@ -92,7 +95,7 @@ import javax.swing.text.html.HTML;
  * 
  * @author tduva
  */
-public class ChannelTextPane extends JTextPane implements LinkListener, EmoticonUser {
+public class ChannelTextPane extends JTextPane implements LinkListener, CachedImageUser {
     
     private static final Logger LOGGER = Logger.getLogger(ChannelTextPane.class.getName());
     
@@ -166,7 +169,8 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
         BAN_DURATION_MESSAGE, BAN_REASON_MESSAGE,
         
         ACTION_COLORED, LINKS_CUSTOM_COLOR, BUFFER_SIZE, AUTO_SCROLL_TIME,
-        EMOTICON_MAX_HEIGHT, EMOTICON_SCALE_FACTOR, BOT_BADGE_ENABLED,
+        EMOTICON_MAX_HEIGHT, EMOTICON_SCALE_FACTOR, USERICON_SCALE_FACTOR,
+        CUSTOM_USERICON_SCALE_MODE, BOT_BADGE_ENABLED,
         FILTER_COMBINING_CHARACTERS, PAUSE_ON_MOUSEMOVE,
         PAUSE_ON_MOUSEMOVE_CTRL_REQUIRED, EMOTICONS_BTTV_SHOW_ANIMATED,
         EMOTICONS_ANIMATED,
@@ -356,6 +360,9 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
     public boolean imageUpdate(Image img, int infoflags,
                                int x, int y, int w, int h) {
         if ((infoflags & FRAMEBITS) != 0 && !Debugging.isEnabled("gif1")) {
+            if (!isShowing()) {
+                return false;
+            }
             // Paint new frame of multi-frame image
             boolean imageToRepaintStillPresent = repaintImage(img);
             
@@ -508,13 +515,29 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
             lastUsers.add(new MentionCheck(message.user));
         }
         
-        String text = message.infoText;
-        print("["+message.type+"] "+text, userStyle);
+        boolean isAnnouncement = message.tags != null && message.tags.isValue("msg-id", "announcement");
+        if (isAnnouncement) {
+            MutableAttributeSet announcementStyle = styles.announcement(message.user, message.tags);
+            if (announcementStyle != null) {
+                print("*", announcementStyle);
+            }
+        }
+        String text = String.format("[%s] %s", message.type, message.infoText);
+        int offset = text.length();
+        printSpecials(message.user, text, userStyle, message.highlightMatches);
         if (!StringUtil.isNullOrEmpty(message.attachedMessage)) {
-            print(" [", style);
+            boolean showBrackets = !isAnnouncement;
+            if (showBrackets) {
+                print(" [", style);
+                offset += 2;
+            }
             // Output with emotes, but don't turn URLs into clickable links
-            printSpecialsNormal(message.attachedMessage, message.user, style, message.emotes, true, false, null, null, null, message.tags);
-            print("]", style);
+            boolean ignoreLinks = !isAnnouncement;
+            java.util.List<Match> highlightMatches = Match.shiftMatchList(message.highlightMatches, -offset);
+            printSpecialsNormal(message.attachedMessage, message.user, style, message.emotes, ignoreLinks, false, highlightMatches, null, null, message.tags);
+            if (showBrackets) {
+                print("]", style);
+            }
         }
         finishLine();
     }
@@ -527,9 +550,9 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
         userStyle.addAttribute(Attribute.ID_AUTOMOD, message.msgId);
         // Should be the same as the start of the "text" in the AutoModMessage,
         // so highlight matches are displayed properly
-        String startText = "[AutoMod] <"+message.user.getDisplayNick()+">";
-        print(startText, userStyle);
-        printSpecialsInfo(" "+message.message, style,
+        String startText = "[AutoMod] <"+message.user.getDisplayNick()+"> ";
+        printSpecials(message.user, startText, userStyle, message.highlightMatches);
+        printSpecialsInfo(message.message, style,
                 Match.shiftMatchList(message.highlightMatches, -startText.length()));
         finishLine();
     }
@@ -573,7 +596,7 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
             style = styles.standard(color);
         }
         printTimestamp(style);
-        printUser(user, action, message.whisper, message.id, background, message.tags);
+        printUser(user, message.localUser, action, message.whisper, message.id, background, message.tags);
         
         // Change style for text if /me and no highlight (if enabled)
         if (!highlighted && color == null && action && styles.isEnabled(Setting.ACTION_COLORED)) {
@@ -1898,7 +1921,7 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
      * @param whisper 
      * @param msgId 
      */
-    private void printUser(User user, boolean action,
+    private void printUser(User user, User localUser, boolean action,
             boolean whisper, String msgId, Color background, MsgTags tags) {
         
         // Decide on name based on settings and available names
@@ -1919,7 +1942,7 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
         
         // Badges or Status Symbols
         if (styles.isEnabled(Setting.USERICONS_ENABLED)) {
-            printUserIcons(user, tags);
+            printUserIcons(user, localUser, tags);
         }
         else {
             userName = user.getModeSymbol()+userName;
@@ -2046,12 +2069,12 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
      * 
      * @param user 
      */
-    private void printUserIcons(User user, MsgTags tags) {
+    private void printUserIcons(User user, User localUser, MsgTags tags) {
         boolean botBadgeEnabled = styles.isEnabled(Setting.BOT_BADGE_ENABLED);
-        java.util.List<Usericon> badges = user.getBadges(botBadgeEnabled, tags, type == Type.STREAM_CHAT);
+        java.util.List<Usericon> badges = user.getBadges(botBadgeEnabled, tags, localUser, type == Type.STREAM_CHAT);
         if (badges != null) {
             for (Usericon badge : badges) {
-                if (badge.image != null && !badge.removeBadge) {
+                if (!badge.removeBadge) {
                     print(badge.getSymbol(), styles.makeIconStyle(badge, user));
                 }
             }
@@ -2320,6 +2343,18 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
         printSpecials(user, text, style, ranges, rangesStyle, highlightMatches);
     }
     
+    /**
+     * Only custom style and highlight matches.
+     * 
+     * @param user
+     * @param text
+     * @param style
+     * @param highlightMatches 
+     */
+    private void printSpecials(User user, String text, AttributeSet style, java.util.List<Match> highlightMatches) {
+        printSpecials(user, text, style, new TreeMap<>(), new HashMap<>(), highlightMatches);
+    }
+    
     private void printSpecials(User user, String text,
             AttributeSet style,
             Map<Integer, Integer> ranges,
@@ -2571,10 +2606,18 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
             addTwitchTagsEmoticons(user, emoticonsById, text, ranges, rangesStyle, tagEmotes);
         }
         
+        if (user.isLocalUser()) {
+            findEmoticons(main.emoticons.getUsableGlobalTwitchEmotes(), text, ranges, rangesStyle);
+            findEmoticons(main.emoticons.getSmilies(), text, ranges, rangesStyle);
+        }
+        
+        // Channel based (may also have a emoteset restriction)
+        HashSet<Emoticon> channelEmotes = main.emoticons.getEmoticonsByStream(user.getStream());
+        findEmoticons(user, channelEmotes, text, ranges, rangesStyle, main.emoticons.getAllLocalEmotesets());
+        
         // All-channels emotes
         if (user.isLocalUser()) {
-            findEmoticons(main.emoticons.getSmilies(), text, ranges, rangesStyle);
-            findEmoticons(main.emoticons.getUsableGlobalEmotes(), text, ranges, rangesStyle);
+            findEmoticons(main.emoticons.getUsableGlobalOtherEmotes(), text, ranges, rangesStyle);
         }
         else {
             if (tagEmotes == null) {
@@ -2584,10 +2627,6 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
             Set<Emoticon> emoticons = main.emoticons.getOtherGlobalEmotes();
             findEmoticons(emoticons, text, ranges, rangesStyle);
         }
-
-        // Channel based (may also have a emoteset restriction)
-        HashSet<Emoticon> channelEmotes = main.emoticons.getEmoticonsByStream(user.getStream());
-        findEmoticons(user, channelEmotes, text, ranges, rangesStyle, main.emoticons.getAllLocalEmotesets());
         
         // Special Combined Emotes
         CombinedEmotesInfo cei = ChattyMisc.getCombinedEmotesInfo();
@@ -2604,12 +2643,12 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
                 int start = range.getKey();
                 int end = range.getValue();
                 MutableAttributeSet style = rangesStyle.get(start);
-                EmoticonImage image = (EmoticonImage) style.getAttribute(Attribute.EMOTICON);
+                CachedImage<Emoticon> image = (CachedImage<Emoticon>) style.getAttribute(Attribute.EMOTICON);
                 // Only affect emotes that aren't GIFs
                 if (image != null && !image.isAnimated()) {
                     // Check for emote that can overlay over another one, and
                     // that there is an emote to modify directly before that
-                    if (cei.containsCode(image.getEmoticon().code)
+                    if (cei.containsCode(image.getObject().code)
                             && !emotes.isEmpty()
                             && lastEnd + 2 == start) {
                         // Extend original emote to span to the end of this one
@@ -2629,8 +2668,8 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
                     }
                     // Add all emotes, if this is not an overlay emote it will
                     // start empty (and only add each emote only once)
-                    if (!emotes.contains(image.getEmoticon())) {
-                        emotes.add(image.getEmoticon());
+                    if (!emotes.contains(image.getObject())) {
+                        emotes.add(image.getObject());
                     }
                     lastEnd = end;
                 }
@@ -2703,15 +2742,14 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
                          * Add emote from message alone
                          */
                         String code = text.substring(start, end+1);
-                        String url = Emoticon.getTwitchEmoteUrlById(id, 1, styles.emoticonImageType());
                         Emoticon.Builder b = new Emoticon.Builder(
-                                Emoticon.Type.TWITCH, code, url);
+                                Emoticon.Type.TWITCH, code, null);
                         b.setStringId(id);
                         b.setEmoteset(Emoticon.SET_UNKNOWN);
                         emoticon = b.build();
                         main.emoticons.addTempEmoticon(emoticon);
                     }
-                    if (!main.emoticons.isEmoteIgnored(emoticon)) {
+                    if (!main.emoticons.isEmoteIgnored(emoticon, IgnoredEmotes.CHAT)) {
                         addEmoticon(emoticon, start, end, ranges, rangesStyle);
                     }
                 }
@@ -2745,7 +2783,7 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
             if (!emoticon.matchesUser(user, accessToSets)) {
                 continue;
             }
-            if (main.emoticons.isEmoteIgnored(emoticon)) {
+            if (main.emoticons.isEmoteIgnored(emoticon, IgnoredEmotes.CHAT)) {
                 continue;
             }
             if (emoticon.isAnimated()
@@ -2788,7 +2826,7 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
                         // CONTINUE
                         continue;
                     }
-                    boolean ignored = main.emoticons.isEmoteIgnored(emote);
+                    boolean ignored = main.emoticons.isEmoteIgnored(emote, IgnoredEmotes.CHAT);
                     if (!ignored && addEmoticon(emote, start, end - bitsLength, ranges, rangesStyle)) {
                         // Add emote
                         addFormattedText(emote.color, end - bitsLength + 1, end, ranges, rangesStyle);
@@ -2807,16 +2845,14 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
             Map<Integer, Integer> ranges,
             Map<Integer, MutableAttributeSet> rangesStyle) {
         if (!inRanges(start, ranges) && !inRanges(end, ranges)) {
-            if (emoticon.getIcon(this) != null) {
-                ranges.put(start, end);
-                MutableAttributeSet attr = styles.emoticon(emoticon);
-                // Add an extra attribute, making this Style unique
-                // (else only one icon will be output if two of the same
-                // follow in a row)
-                attr.addAttribute("start", start);
-                rangesStyle.put(start, attr);
-                return true;
-            }
+            ranges.put(start, end);
+            MutableAttributeSet attr = styles.emoticon(emoticon);
+            // Add an extra attribute, making this Style unique
+            // (else only one icon will be output if two of the same
+            // follow in a row)
+            attr.addAttribute("start", start);
+            rangesStyle.put(start, attr);
+            return true;
         }
         return false;
     }
@@ -2972,8 +3008,9 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
      * @param style
      */
     protected void printTimestamp(AttributeSet style) {
-        if (styles.timestampFormat() != null) {
-            print(DateTime.currentTime(styles.timestampFormat())+" ", styles.timestamp(style));
+        Timestamp timestamp = styles.timestampFormat();
+        if (timestamp != null) {
+            print(timestamp.make(-1, channel != null ? channel.getRoom() : null)+" ", styles.timestamp(style));
         }
         else {
             // Inserts the linebreak with a style that shouldn't break anything
@@ -3385,7 +3422,7 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
         }
         
         private void showFixedChatInfo() {
-            if (popup == null) {
+            if (popup == null && isShowing()) {
                 if (fixedChatInfoLabel == null) {
                     createFixedChatInfoLabel();
                 }
@@ -3437,7 +3474,7 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
         /**
          * Store the timestamp format
          */
-        private SimpleDateFormat timestampFormat;
+        private Timestamp timestampFormat;
         
         private int bufferSize = -1;
         
@@ -3448,25 +3485,6 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
          * only be done once per icon.
          */
         private final HashMap<Usericon, MutableAttributeSet> savedIcons = new HashMap<>();
-        
-        /**
-         * Creates a new ImageIcon based on the given ImageIcon that has a small
-         * space on the side, so it can be displayed properly.
-         * 
-         * @param icon
-         * @return 
-         */
-        private ImageIcon addSpaceToIcon(ImageIcon icon) {
-            int width = icon.getIconWidth();
-            int height = icon.getIconHeight();
-            int hspace = 3;
-            BufferedImage res = new BufferedImage(width + hspace, height, BufferedImage.TYPE_INT_ARGB);
-            Graphics g = res.getGraphics();
-            g.drawImage(icon.getImage(), 0, 0, null);
-            g.dispose();
-
-            return new ImageIcon(res);
-        }
         
         /**
          * Get the current styles from the StyleServer and also set some
@@ -3637,6 +3655,8 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
             addNumericSetting(Setting.AUTO_SCROLL_TIME, 30, 5, 1234);
             addNumericSetting(Setting.EMOTICON_MAX_HEIGHT, 200, 0, 300);
             addNumericSetting(Setting.EMOTICON_SCALE_FACTOR, 100, 1, 200);
+            addNumericSetting(Setting.USERICON_SCALE_FACTOR, 100, 1, 200);
+            addNumericSetting(Setting.CUSTOM_USERICON_SCALE_MODE, 0, 0, 10);
             addNumericSetting(Setting.DISPLAY_NAMES_MODE, 0, 0, 10);
             addNumericSetting(Setting.BOTTOM_MARGIN, -1, -1, 100);
             addNumericSetting(Setting.HIGHLIGHT_HOVERED_USER, 0, 0, 4);
@@ -3986,26 +4006,16 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
          * @return The created style (or read from the cache)
          */
         public MutableAttributeSet makeIconStyle(Usericon icon, User user) {
-            MutableAttributeSet style = savedIcons.get(icon);
-            if (style == null) {
-                //System.out.println("Creating icon style: "+icon);
-                style = new SimpleAttributeSet(nick());
-                if (icon != null && icon.image != null) {
-                    StyleConstants.setIcon(style, addSpaceToIcon(icon.image));
-                    style.addAttribute(Attribute.USERICON, icon);
-                }
-                savedIcons.put(icon, style);
-            }
-            // Update per-user information every time
+            MutableAttributeSet style = new SimpleAttributeSet(nick());
+            CachedImage<Usericon> usericonImage = icon.getIcon(usericonScaleFactor(), getInt(Setting.CUSTOM_USERICON_SCALE_MODE), ChannelTextPane.this);
+            StyleConstants.setIcon(style, usericonImage.getImageIcon());
+            style.addAttribute(Attribute.USERICON, usericonImage);
             if (icon.type == Usericon.Type.TWITCH
                     && (Usericon.typeFromBadgeId(icon.badgeType.id) == Usericon.Type.SUB
                     || Usericon.typeFromBadgeId(icon.badgeType.id) == Usericon.Type.FOUNDER)
                     && user != null
                     && user.getSubMonths() > 0) {
                 style.addAttribute(Attribute.USERICON_INFO, DateTime.formatMonthsVerbose(user.getSubMonths()));
-            }
-            else {
-                style.removeAttribute(Attribute.USERICON_INFO);
             }
             return style;
         }
@@ -4016,6 +4026,10 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
         
         public float emoticonScaleFactor() {
             return (float)(numericSettings.get(Setting.EMOTICON_SCALE_FACTOR) / 100.0);
+        }
+        
+        public float usericonScaleFactor() {
+            return (float)(numericSettings.get(Setting.USERICON_SCALE_FACTOR) / 100.0);
         }
         
         public int getInt(Setting setting) {
@@ -4061,7 +4075,7 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
         public MutableAttributeSet emoticon(Emoticon emoticon) {
             // Does this need any other attributes e.g. standard?
             SimpleAttributeSet emoteStyle = new SimpleAttributeSet();
-            EmoticonImage emoteImage = emoticon.getIcon(
+            CachedImage<Emoticon> emoteImage = emoticon.getIcon(
                     emoticonScaleFactor(), emoticonMaxHeight(), emoticonImageType(), ChannelTextPane.this);
             StyleConstants.setIcon(emoteStyle, emoteImage.getImageIcon());
             
@@ -4075,7 +4089,7 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
             return Emoticon.makeImageType(isEnabled(Setting.EMOTICONS_ANIMATED));
         }
         
-        public SimpleDateFormat timestampFormat() {
+        public Timestamp timestampFormat() {
             return timestampFormat;
         }
         
@@ -4101,6 +4115,74 @@ public class ChannelTextPane extends JTextPane implements LinkListener, Emoticon
             style.addAttribute(Attribute.REPLY_PARENT_MSG_ID, parentMsgId);
             return style;
         }
+        
+        public MutableAttributeSet announcement(User user, MsgTags tags) {
+            // May be null
+            String colorString = tags.get("msg-param-color");
+            /**
+             * Just a simple check, normally the values should be restricted by
+             * Twitch, but who knows.
+             */
+            if (colorString != null && colorString.length() > 20) {
+                return null;
+            }
+            /**
+             * Use info color as fallback (which means it's also used when the
+             * tag is set to PRIMARY color).
+             */
+            Color fallbackColor = StyleConstants.getForeground(info());
+            Color color = HtmlColors.decode(colorString, fallbackColor);
+            
+            String id = "announcement";
+            String version = HtmlColors.getNamedColorString(color);
+            
+            /**
+             * Create the icon if it doesn't already exist. The version of the
+             * badge is the color, so each color is only created once. It's the
+             * actual color used (not directly from the tag) since the default
+             * color may change (if the info color changes).
+             */
+            UsericonManager m = user.getUsericonManager();
+            Usericon icon = m.getIcon(Usericon.Type.OTHER, "announcement", version, user, tags);
+            if (icon == null) {
+                String title = "Announcement";
+                if (colorString != null && !colorString.equals("PRIMARY")) {
+                    title = String.format("Announcement (%s)", colorString);
+                }
+                icon = UsericonFactory.createSpecialOtherIcon(id, version,
+                        MainGui.class.getResource("announcement.png"),
+                        MainGui.class.getResource("announcement@2x.png"),
+                        title);
+                m.addDefaultIcon(icon);
+            }
+            if (icon.removeBadge) {
+                return null;
+            }
+            SimpleAttributeSet style = new SimpleAttributeSet();
+            CachedImage<Usericon> usericonImage = icon.getIcon(usericonScaleFactor(), getInt(Setting.CUSTOM_USERICON_SCALE_MODE), ChannelTextPane.this);
+            StyleConstants.setIcon(style, usericonImage.getImageIcon());
+            style.addAttribute(Attribute.USERICON, usericonImage);
+            return style;
+        }
+    }
+    
+    /**
+     * Creates a new ImageIcon based on the given ImageIcon that has a small
+     * space on the side, so it can be displayed properly.
+     *
+     * @param icon
+     * @return
+     */
+    public static ImageIcon addSpaceToIcon(ImageIcon icon) {
+        int width = icon.getIconWidth();
+        int height = icon.getIconHeight();
+        int hspace = 3;
+        BufferedImage res = new BufferedImage(width + hspace, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics g = res.getGraphics();
+        g.drawImage(icon.getImage(), 0, 0, null);
+        g.dispose();
+
+        return new ImageIcon(res);
     }
     
     private static class MentionCheck {

@@ -4,6 +4,7 @@ package chatty.gui.components.menus;
 import chatty.Chatty;
 import static chatty.gui.components.menus.ContextMenuHelper.ICON_WEB;
 import chatty.util.StringUtil;
+import chatty.util.api.CachedImage;
 import chatty.util.api.usericons.Usericon;
 import java.awt.event.ActionEvent;
 
@@ -14,22 +15,29 @@ import java.awt.event.ActionEvent;
 public class UsericonContextMenu extends ContextMenu {
 
     private final ContextMenuListener listener;
-    private final Usericon usericon;
+    private final CachedImage<Usericon> usericonImage;
     
-    public UsericonContextMenu(Usericon usericon, ContextMenuListener listener) {
+    public UsericonContextMenu(CachedImage<Usericon> usericonImage, ContextMenuListener listener) {
         this.listener = listener;
-        this.usericon = usericon;
+        this.usericonImage = usericonImage;
+        Usericon usericon = usericonImage.getObject();
         
         //--------------------
         // General Description
         //--------------------
         if (usericon.metaTitle.isEmpty()) {
-            addItem("badgeImage", "Badge: "+usericon.type.label, ContextMenuHelper.ICON_IMAGE);
+            addItem("", "Badge: "+usericon.type.label);
         } else {
-            addItem("badgeImage", "Badge: "+usericon.metaTitle, ContextMenuHelper.ICON_IMAGE);
+            addItem("", "Badge: "+usericon.metaTitle);
             if (!usericon.metaTitle.equals(usericon.metaDescription) && !usericon.metaDescription.isEmpty()) {
                 addItem("", StringUtil.shortenTo(usericon.metaDescription, 30));
             }
+        }
+        addItem("badgeImage", usericonImage.getSizeString(), ContextMenuHelper.ICON_IMAGE);
+        
+        if (usericon.source != Usericon.SOURCE_CUSTOM) {
+            addSeparator();
+            addItem("hideUsericonOfBadgeType", "Hide badges of this type");
         }
         
         //--------
@@ -52,14 +60,14 @@ public class UsericonContextMenu extends ContextMenu {
         if (!usericon.channelRestriction.isEmpty()) {
             addItem("", "Channel: "+usericon.channelRestriction, infoMenu);
         }
-        if (!usericon.badgeType.isEmpty()) {
-            if (usericon.source == Usericon.SOURCE_TWITCH2
-                    || usericon.source == Usericon.SOURCE_OTHER) {
-                // Only show add options if original Twitch emote (custom emote
-                // would already be added)
+        if (usericon.source != Usericon.SOURCE_CUSTOM) {
+            if (usericon.badgeType.isEmpty()) {
+                addItem("addUsericonOfBadgeType", "Override/Hide (" + usericon.type.label + ")", infoMenu);
+            }
+            else {
                 addSeparator(infoMenu);
-                addItem("addUsericonOfBadgeType", "Override/Hide ("+usericon.badgeType+")", infoMenu);
-                addItem("addUsericonOfBadgeTypeAllVariants", "Override/Hide (all "+usericon.badgeType.id+" variants)", infoMenu);
+                addItem("addUsericonOfBadgeType", "Override/Hide (" + usericon.badgeType + ")", infoMenu);
+                addItem("addUsericonOfBadgeTypeAllVariants", "Override/Hide (all " + usericon.badgeType.id + " variants)", infoMenu);
             }
         }
         
@@ -75,7 +83,7 @@ public class UsericonContextMenu extends ContextMenu {
     @Override
     public void actionPerformed(ActionEvent e) {
         if (listener != null) {
-            listener.usericonMenuItemClicked(e, usericon);
+            listener.usericonMenuItemClicked(e, usericonImage);
         }
     }
     

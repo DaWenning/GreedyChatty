@@ -169,6 +169,30 @@ public class RawMessageTest {
         if (type.equals("first")) {
             return "@color=;display-name=Test;id=123;first-msg=1;mod=0;room-id=123;tmi-sent-ts=123;turbo=0;user-id=123;user-type= :test!test@test.tmi.twitch.tv PRIVMSG "+channel+" :hello";
         }
+        if (type.equals("firstsub")) {
+            return "@color=;badges=founder/0;display-name=Test;id=123;first-msg=1;mod=0;room-id=123;tmi-sent-ts=123;turbo=0;user-id=123;user-type= :test!test@test.tmi.twitch.tv PRIVMSG "+channel+" :hello";
+        }
+        if (type.equals("announcement")) {
+            String color = "PRIMARY";
+            if (!StringUtil.isNullOrEmpty(options)) {
+                color = options;
+            }
+            return "@badge-info=;badges=broadcaster/1;color=#033700;display-name=ModName;emotes=;flags=;id=1234;login=modname;mod=0;msg-id=announcement;msg-param-color="+color+";room-id=1234;subscriber=0;system-msg=;tmi-sent-ts=1648758023469;user-id=1234;user-type= :tmi.twitch.tv USERNOTICE "+channel+" :This is an announcement https://chatty.github.io";
+        }
+        if (type.equals("announcement2")) {
+            return "@badge-info=subscriber/28;badges=broadcaster/1,subscriber/0,premium/1;color=#0000FF;display-name=ModeratorName;emotes=emotesv2_bc0b18e802fb430ca03f0ad04efea2d1:0-6;flags=;id=1234;login=moderatorname;mod=0;msg-id=announcement;msg-param-color=PRIMARY;room-id=1234;subscriber=1;system-msg=;tmi-sent-ts=1648763597214;user-id=1234;user-type= :tmi.twitch.tv USERNOTICE "+channel+" :joshSss";
+        }
+        if (type.equals("announcement3")) {
+            return "@badge-info=;badges=broadcaster/1;color=#033700;display-name=ModName;emotes=;flags=;id=1234;login=modname;mod=0;msg-id=announcement;room-id=1234;subscriber=0;system-msg=;tmi-sent-ts=1648758023469;user-id=1234;user-type= :tmi.twitch.tv USERNOTICE "+channel+" :"+options;
+        }
+        if (type.equals("custom")) {
+            String[] parts = options.split("&");
+            String badges = parts[0];
+            String name = parts[1];
+            String username = name.toLowerCase();
+            String msg = parts[2];
+            return "@badges="+badges+";color=#008000;display-name="+name+";emote-only=0;emotes=;id=fwaef;mod=0;subscriber=1;tmi-sent-ts=1508516209239;turbo=0;user-type= :"+name+"!abc@abc.tmi.twitch.tv PRIVMSG "+channel+" :"+msg;
+        }
         return null;
     }
     

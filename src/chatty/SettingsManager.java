@@ -76,7 +76,7 @@ public class SettingsManager {
                     JSONParser parser = new JSONParser();
                     JSONObject root = (JSONObject)parser.parse(content);
                     JSONArray ab = (JSONArray)root.get("abEntries");
-                    return new FileManager.FileContentInfo(true, String.format("%d settings, %d addressbook entries",
+                    return new FileManager.FileContentInfo(true, String.format(Locale.ROOT, "%d settings, %d addressbook entries",
                             root.size(), ab != null ? ab.size() : 0));
                 }
                 catch (Exception ex) {
@@ -111,7 +111,6 @@ public class SettingsManager {
 
         settings.addBoolean("dontSaveSettings", false);
         settings.addLong("autoSaveSettings", 15);
-        settings.addBoolean("debugCommands", false, false);
         settings.addBoolean("debugLogIrc", false);
         settings.addBoolean("debugLogIrcFile", false);
         settings.addBoolean("autoRequestMods", false);
@@ -135,7 +134,7 @@ public class SettingsManager {
         addDefaultHotkey("0.7.3", "dialog.toggleEmotes", "ctrl E");
         addDefaultHotkey("0.7.3", "dialog.search", "ctrl F");
         addDefaultHotkey("0.7.3", "dialog.joinChannel", "ctrl J");
-        addDefaultHotkeyAppWide("0.7.3", "window.toggleUserlist", "shift F10");
+        addDefaultHotkeyAppWide("0.7.3", "window.toggleUserlist", "F9");
         addDefaultHotkeyAppWide("0.7.3", "window.toggleInput", "ctrl F10");
         addDefaultHotkeyAppWide("0.7.3", "window.toggleCompact", "F10");
         addDefaultHotkeyAppWide("0.7.3", "window.toggleCompactMaximized", "F11");
@@ -177,7 +176,9 @@ public class SettingsManager {
         settings.setFile("userid", loginFile);
         settings.addString("password", "", false);
         settings.addBoolean("connectOnStartup", false, false);
-        settings.addLong("onStart", 1);
+        settings.addLong("onStart", 3);
+        settings.addBoolean("connectDialogIfMissing", true);
+        settings.addLong("minimizeOnStart", 0);
         settings.addString("autojoinChannel", "");
         settings.addString("previousChannel", "");
         settings.addString("token","");
@@ -204,23 +205,24 @@ public class SettingsManager {
         settings.addLong("lafVariant", 0);
         settings.addString("lafStyle", "regular");
         settings.addString("lafScroll", "default");
-        settings.addBoolean("lafNativeWindow", false);
+        settings.addBoolean("lafNativeWindow", true);
         settings.addString("language", "");
+        settings.addString("locale", "");
         settings.addString("timezone", "");
         
         settings.addLong("dialogFontSize", -1);
 
         // Chat Appearance
-        settings.addString("font","Consolas");
+        settings.addString("font","Dialog");
         settings.addLong("fontSize",14);
         settings.addBoolean("timestampFontEnabled", false);
-        settings.addString("timestampFont", "Consolas 14");
+        settings.addString("timestampFont", "Dialog 12");
         settings.addString("inputFont", "Dialog 14");
         settings.addString("userlistFont", "Dialog Bold 12");
         settings.addLong("lineSpacing", 2);
         settings.addLong("paragraphSpacing", 8);
         settings.addLong("bottomMargin", -1);
-        settings.addString("timestamp","[HH:mm]");
+        settings.addString("timestamp","HH:mm");
         settings.addString("timestampTimezone", "");
         settings.addBoolean("capitalizedNames", true);
         settings.addBoolean("ircv3CapitalizedNames", true);
@@ -247,8 +249,12 @@ public class SettingsManager {
         settings.addBoolean("ffzEvent", true);
         settings.addBoolean("ffzModIcon", true);
         settings.addBoolean("bttvEmotes", true);
+        settings.addBoolean("seventv", true);
         settings.addBoolean("showAnimatedEmotes", true);
         settings.addBoolean("animatedEmotes", true);
+        settings.addLong("animationPause", 2);
+        settings.addLong("animationPauseFrame", 2);
+        settings.addBoolean("legacyAnimations", false);
         settings.addList("ignoredEmotes", new ArrayList(), Setting.STRING);
         settings.addList("favoriteEmotes", new ArrayList(), Setting.LIST);
         settings.addLong("smilies", 10);
@@ -256,12 +262,16 @@ public class SettingsManager {
         
         settings.addString("emoji", "twemoji");
         settings.addBoolean("emojiReplace", true);
+        settings.addLong("emojiZWJ", 2);
         settings.addString("cheersType", "animated");
 
         settings.addBoolean("usericonsEnabled", true);
-        
+        settings.addLong("usericonScale", 100);
+        settings.addLong("customUsericonScaleMode", 0);
         settings.addList("customUsericons", new ArrayList(), Setting.LIST);
         settings.addBoolean("customUsericonsEnabled", false);
+        
+        settings.addList("hiddenUsericons", new ArrayList(), Setting.LIST);
         
         settings.addBoolean("botBadgeEnabled", true);
         settings.addBoolean("botNamesBTTV", true);
@@ -325,8 +335,10 @@ public class SettingsManager {
         List<String> commandsDefault = new ArrayList<>();
         commandsDefault.add("/slap /me slaps $$1- around a bit with a large trout");
         commandsDefault.add("/permit !permit $$1");
+        commandsDefault.add("/j /join $$1-");
         settings.addList("commands", commandsDefault, Setting.STRING);
         settings.addMap("var", new HashMap(), Setting.STRING);
+        settings.addList("timers", new ArrayList<>(), Setting.LIST);
 
         // Menu Entries
         settings.addString("timeoutButtons","/Ban[B], /Unban[U], 5s[1], 2m[2], 10m[3], 30m[4], /ModUnmod"
@@ -422,6 +434,7 @@ public class SettingsManager {
         // Tray
         settings.addBoolean("closeToTray", false);
         settings.addBoolean("minimizeToTray", false);
+        settings.addBoolean("hidePopoutsIfTray", true);
         settings.addBoolean("trayIconAlways", false);
         settings.addBoolean("singleClickTrayOpen", true);
         
@@ -463,6 +476,7 @@ public class SettingsManager {
         settings.addBoolean("tabsMwheelScrolling", false);
         settings.addBoolean("tabsMwheelScrollingAnywhere", true);
         settings.addBoolean("tabsCloseMMB", true);
+        settings.addBoolean("tabsCloseSwitchToPrev", true);
         settings.addString("tabsPlacement", "top");
         settings.addString("tabsLayout", "wrap");
         settings.addLong("tabsLive", 16);
@@ -535,6 +549,7 @@ public class SettingsManager {
         settings.addLong("nPosition", 3);
         settings.addLong("nDisplayTime", 10);
         settings.addLong("nMaxDisplayTime", 60*30);
+        settings.addBoolean("nKeepOpenOnHover", true);
         settings.addLong("nMaxDisplayed", 4);
         settings.addLong("nMaxQueueSize", 4);
         settings.addBoolean("nActivity", false);
@@ -573,7 +588,7 @@ public class SettingsManager {
         settings.addBoolean("showModActions", true);
         settings.addBoolean("showModActionsRestrict", true);
         settings.addBoolean("showActionBy", true);
-        settings.addBoolean("showAutoMod", false);
+        settings.addBoolean("showAutoMod", true);
 
         // Timeouts/Bans
         settings.addBoolean("showBanMessages", false);
@@ -602,6 +617,7 @@ public class SettingsManager {
         settings.addBoolean("highlightOwnText", false);
         settings.addBoolean("highlightNextMessages", false);
         settings.addBoolean("highlightIgnored", false);
+        settings.addBoolean("highlightOverrideIgnored", false);
         settings.addList("noHighlightUsers", new ArrayList(), Setting.STRING);
         settings.addList("highlightBlacklist", new ArrayList(), Setting.STRING);
         settings.addBoolean("highlightMatches", true);
@@ -632,6 +648,8 @@ public class SettingsManager {
         matchingPresetsDefault.add("# _special replaces every letter of words surrounded by ~ with: (<letter>[\\W_]*?)+");
         matchingPresetsDefault.add("_special $replace($1-,$\"~([^~]+)~\",$replace($(g1),$\"(\\w)\",$\"($1[\\\\W_]*?)+\",regRef),regCustom)");
         settings.addList("matchingPresets", matchingPresetsDefault, Setting.STRING);
+        settings.addList("matchingSubstitutes", new ArrayList(), Setting.STRING);
+        settings.addBoolean("matchingSubstitutesEnabled", false);
         
         // Repeated Messages
         settings.addBoolean("repeatMsg", false);
@@ -685,6 +703,7 @@ public class SettingsManager {
         settings.addString("completionEmotePrefix", ":");
         settings.addLong("completionMixed", 0);
         settings.addBoolean("completionSpace", false);
+        settings.addBoolean("completionFavEmotesFirst", true);
         
         // Replying
         settings.addBoolean("mentionReplyRestricted", false);
@@ -765,6 +784,10 @@ public class SettingsManager {
         return loadSuccess;
     }
     
+    public boolean wasMainFileLoaded() {
+        return settings.wasFileLoaded("settings");
+    }
+    
     /**
      * Perform backup, specifying the minimum delay the backup should be
      * performed in (seconds). The backup manager will decide whether to
@@ -839,10 +862,17 @@ public class SettingsManager {
         }
     }
     
+    private static String previousVersion;
+    
     /**
      * Override some now unused settings or change settings on version change.
      */
     public void overrideSettings() {
+        previousVersion = settings.getString("currentVersion");
+        if (!Chatty.VERSION.equals(previousVersion)) {
+            LOGGER.info("Changed from version "+previousVersion);
+        }
+        
         settings.setBoolean("ignoreJoinsParts", false);
         if (switchedFromVersionBefore("0.7.2")) {
             String value = settings.getString("timeoutButtons");
@@ -918,8 +948,11 @@ public class SettingsManager {
              * not all favorites were migrated correctly).
              */
             LOGGER.info("Migrating Favorites/History");
+            @SuppressWarnings("unchecked") // Setting
             List<String> favs = settings.getList("channelFavorites");
+            @SuppressWarnings("unchecked") // Setting
             Map<String, Long> history = settings.getMap("channelHistory");
+            @SuppressWarnings("unchecked") // Setting
             Map<String, List> data = settings.getMap("roomFavorites");
             // Migrate history
             for (String stream : history.keySet()) {
@@ -977,12 +1010,17 @@ public class SettingsManager {
      * the given one, this returns true. Usually the current version would be
      * used if a new condition is added, to change a setting only on the switch
      * to the given version.
+     * 
+     * This can be used after the settings have been properly loaded.
      *
      * @param version The version to check against
      * @return true if the given version is greater than the current version
      */
-    private boolean switchedFromVersionBefore(String version) {
-        return Version.compareVersions(settings.getString("currentVersion"), version) == 1;
+    public static boolean switchedFromVersionBefore(String version) {
+        if (previousVersion != null) {
+            return Version.compareVersions(previousVersion, version) == 1;
+        }
+        return false;
     }
     
     public void debugSettings() {
@@ -1035,6 +1073,7 @@ public class SettingsManager {
         for (DefaultHotkey hotkey : defaultHotkeys) {
             // Check version of when the default hotkey was added
             if (switchedFromVersionBefore(hotkey.version)) {
+                @SuppressWarnings("unchecked") // Setting
                 List<List> setting = settings.getList("hotkeys");
                 Iterator<List> it = setting.iterator();
                 // Remove hotkey if already in setting

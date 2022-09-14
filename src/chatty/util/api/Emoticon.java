@@ -3,40 +3,23 @@ package chatty.util.api;
 
 import chatty.Helper;
 import chatty.User;
-import chatty.gui.GuiUtil;
-import chatty.gui.components.textpane.ChannelTextPane;
-import chatty.util.DateTime;
-import chatty.util.HalfWeakSet;
-import chatty.util.ImageCache;
-import chatty.util.MiscUtil;
+import chatty.util.ImageCache.ImageResult;
 import chatty.util.StringUtil;
-import java.awt.Color;
+import chatty.util.api.CachedImage.ImageType;
 import java.awt.Dimension;
-import java.awt.FontMetrics;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.Image;
-import java.awt.MediaTracker;
-import java.awt.RenderingHints;
-import java.awt.image.BufferedImage;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.WeakHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
-import javax.swing.ImageIcon;
-import javax.swing.SwingWorker;
+import chatty.util.api.CachedImage.CachedImageUser;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 /**
  * A single emoticon, that contains a pattern, an URL to the image and
@@ -63,42 +46,49 @@ public class Emoticon {
      */
     public static final String SET_UNKNOWN = "";
     
+    /**
+     * Note that the declaration order is relevant for sorting by Type.
+     */
     public static enum Type {
-        TWITCH("Twitch"), FFZ("FFZ"), BTTV("BTTV"), CUSTOM("Custom"),
-        EMOJI("Emoji"), NOT_FOUND_FAVORITE("NotFoundFavorite"), CUSTOM2("Custom2");
+        TWITCH("twitch", "Twitch", TypeCategory.OFFICIAL),
+        CUSTOM2("chattylocal", "Custom2", TypeCategory.OFFICIAL),
+        FFZ("ffz", "FFZ", TypeCategory.THIRD_PARTY),
+        BTTV("bttv", "BTTV", TypeCategory.THIRD_PARTY),
+        SEVENTV("7tv", "7TV", TypeCategory.THIRD_PARTY),
+        CUSTOM("custom", "Custom", TypeCategory.OTHER),
+        EMOJI("emoji", "Emoji", TypeCategory.OTHER),
+        NOT_FOUND_FAVORITE("fav", "NotFoundFavorite", TypeCategory.OTHER);
         
+        // Must not be changed
+        public String id;
+        // For display
         public String label;
+        public TypeCategory category;
         
-        Type(String label) {
+        Type(String id, String label, TypeCategory category) {
+            this.id = id;
             this.label = label;
+            this.category = category;
         }
+        
+        public static Type fromId(String id) {
+            for (Type type : values()) {
+                if (type.id.equals(id)) {
+                    return type;
+                }
+            }
+            return null;
+        }
+        
+    }
+    
+    public static enum TypeCategory {
+        OFFICIAL, THIRD_PARTY, OTHER
     }
     
     public static enum SubType {
         REGULAR, FEATURE_FRIDAY, EVENT, CHEER, FOLLOWER
     }
-    
-    public static enum ImageType {
-        STATIC, ANIMATED_DARK, ANIMATED_LIGHT
-    }
-    
-    /**
-     * Try loading the image these many times, which will be tried if an error
-     * occurs.
-     */
-    private static final int MAX_LOADING_ATTEMPTS = 3;
-    
-    /**
-     * How much time (milliseconds) has to pass in between loading attempts,
-     * which will only happen if an error occured.
-     */
-    private static final int LOADING_ATTEMPT_DELAY = 30*1000;
-    
-    /**
-     * Number of seconds emote images are supposed to be cached for before they
-     * are refreshed.
-     */
-    private static final int CACHE_TIME = 60*60*24*14;
     
     // Assumed width/height if there is none given
     private static final int DEFAULT_WIDTH = 28;
@@ -107,8 +97,7 @@ public class Emoticon {
     private static final float MAX_WIDTH = 100;
     private static final float MAX_HEIGHT = 50;
     
-    private static final int MAX_SCALED_WIDTH = 250;
-    private static final int MAX_SCALED_HEIGHT = 150;
+    
     
     public final Type type;
     public final SubType subType;
@@ -124,7 +113,7 @@ public class Emoticon {
     public final String creator;
     
     private String stream;
-    private Set<String> infos;
+    private ArrayList<String> infos;
     private String emotesetInfo;
     private boolean isAnimated;
     
@@ -132,8 +121,8 @@ public class Emoticon {
     private volatile int height;
 
     private Matcher matcher;
-    private HalfWeakSet<EmoticonImage> images;
     
+    private CachedImageManager<Emoticon> images;
 
     /**
      * Set required values in contructor and optional values via methods, then
@@ -156,7 +145,7 @@ public class Emoticon {
         private String stream;
         private String emotesetInfo;
         private Set<String> streamRestrictions;
-        private Set<String> infos;
+        private ArrayList<String> infos;
         private String emoteset = SET_NONE;
         private String stringId = null;
         private String stringIdAlias = null;
@@ -233,7 +222,7 @@ public class Emoticon {
         public Builder addInfo(String info) {
             if (info != null) {
                 if (infos == null) {
-                    infos = new HashSet<>();
+                    infos = new ArrayList<>(1);
                 }
                 infos.add(info);
             }
@@ -256,7 +245,10 @@ public class Emoticon {
     }
     
     /**
-     * Get the built URL for this emote if applicable to the emote type.
+     * Get the built URL for this emote if applicable to the emote type. It's
+     * important that the returned URL matches the URL factor, so that the
+     * ImageRequest can correctly calculate the base size. It will attempt to
+     * get factor 1 if 2 returns null.
      * 
      * @param factor The size factor (1 or 2)
      * @param imageType
@@ -270,9 +262,11 @@ public class Emoticon {
             }
         } else if (type == Type.BTTV && stringId != null) {
             return getBttvEmoteUrl(stringId, factor);
+        } else if (type == Type.SEVENTV) {
+            return getSevenTVEmoteUrl(stringId, factor);
         } else if (type == Type.FFZ) {
             return getFFZUrl(factor);
-        } else if (type == Type.EMOJI) {
+        } else if (factor == 1) {
             return url;
         }
         return null;
@@ -285,11 +279,11 @@ public class Emoticon {
     public static String getTwitchEmoteUrlById(String id, int factor, ImageType imageType) {
         switch (imageType) {
             case STATIC:
-                return String.format("https://static-cdn.jtvnw.net/emoticons/v2/%s/static/dark/%d.0", id, factor);
+                return String.format(Locale.ROOT, "https://static-cdn.jtvnw.net/emoticons/v2/%s/static/dark/%d.0", id, factor);
             case ANIMATED_DARK:
-                return String.format("https://static-cdn.jtvnw.net/emoticons/v2/%s/default/dark/%d.0", id, factor);
+                return String.format(Locale.ROOT, "https://static-cdn.jtvnw.net/emoticons/v2/%s/default/dark/%d.0", id, factor);
             case ANIMATED_LIGHT:
-                return String.format("https://static-cdn.jtvnw.net/emoticons/v2/%s/default/light/%d.0", id, factor);
+                return String.format(Locale.ROOT, "https://static-cdn.jtvnw.net/emoticons/v2/%s/default/light/%d.0", id, factor);
         }
         return null;
     }
@@ -309,6 +303,13 @@ public class Emoticon {
             return urlX2;
         }
         return url;
+    }
+    
+    public String getSevenTVEmoteUrl(String id, int factor) {
+        if (StringUtil.isNullOrEmpty(id) || factor > 4) {
+            return null;
+        }
+        return String.format("https://cdn.7tv.app/emote/%s/%dx", id, factor);
     }
 
     /**
@@ -367,6 +368,9 @@ public class Emoticon {
         this.stringIdAlias = builder.stringIdAlias;
         this.creator = builder.creator;
         this.infos = builder.infos;
+        if (this.infos != null) {
+            this.infos.trimToSize();
+        }
         this.isAnimated = builder.isAnimated;
         this.subType = builder.subtype;
     }
@@ -474,16 +478,10 @@ public class Emoticon {
     
     public synchronized void addInfos(Set<String> infosToAdd) {
         if (infos == null) {
-            infos = new HashSet<>();
+            infos = new ArrayList<>();
         }
         infos.addAll(infosToAdd);
-    }
-    
-    public synchronized void addInfo(String info) {
-        if (infos == null) {
-            infos = new HashSet<>();
-        }
-        infos.add(info);
+        infos.trimToSize();
     }
     
     /**
@@ -500,7 +498,7 @@ public class Emoticon {
         if (infos == null) {
             return new TreeSet<>();
         }
-        return new TreeSet<>(infos);
+        return new TreeSet<String>(infos);
     }
     
     public synchronized boolean isAnimated() {
@@ -556,9 +554,8 @@ public class Emoticon {
     }
     
     /**
-     * Get a scaled EmoticonImage for this Emoticon. Should only be called from
-     * the EDT.
-     * 
+     * Get a scaled image for this Emoticon. Should only be called from the EDT.
+     *
      * @param scaleFactor Scale Factor, default (no scaling) should be 1
      * @param maxHeight Maximum height in pixels, default (no max height) should
      * be 0
@@ -566,28 +563,50 @@ public class Emoticon {
      * @param user
      * @return
      */
-    public EmoticonImage getIcon(float scaleFactor, int maxHeight, ImageType imageType, EmoticonUser user) {
+    public CachedImage<Emoticon> getIcon(float scaleFactor, int maxHeight, ImageType imageType, CachedImageUser user) {
         if (images == null) {
-            images = new HalfWeakSet<>();
+            images = new CachedImageManager<>(this, new CachedImage.CachedImageRequester() {
+                @Override
+                public String getImageUrl(int scale, CachedImage.ImageType type) {
+                    return getEmoteUrl(scale, type);
+                }
+
+                @Override
+                public Dimension getBaseSize() {
+                    return getDefaultSize();
+                }
+                
+                @Override
+                public boolean forceBaseSize() {
+                    return width != -1 && height != -1;
+                }
+
+                @Override
+                public void imageLoaded(ImageResult result) {
+                    if (width == -1 || height == -1) {
+                        width = result.actualBaseSize.width;
+                        height = result.actualBaseSize.height;
+                        if (width != DEFAULT_WIDTH || height != DEFAULT_HEIGHT) {
+                            // setCachedSize checks for type
+                            setCachedSize(width, height);
+                        }
+                        else {
+                            /**
+                             * In case an invalid/different size was cached
+                             * before, but now it's the default size.
+                             */
+                            removeCachedSize();
+                        }
+                    }
+                }
+
+                @Override
+                public boolean loadImage() {
+                    return true;
+                }
+            }, ("emote_" + type).intern());
         }
-        EmoticonImage resultImage = null;
-        for (EmoticonImage image : images) {
-            if (image.scaleFactor == scaleFactor
-                    && image.maxHeight == maxHeight
-                    && image.imageType == imageType) {
-                resultImage = image;
-            }
-        }
-        if (resultImage == null) {
-            resultImage = new EmoticonImage(scaleFactor, maxHeight, imageType);
-            images.add(resultImage);
-        } else {
-            images.markStrong(resultImage);
-        }
-        if (user != null) {
-            resultImage.addUser(user);
-        }
-        return resultImage;
+        return images.getIcon(scaleFactor, maxHeight, null, imageType, user);
     }
     
     /**
@@ -596,32 +615,20 @@ public class Emoticon {
      */
     public void clearImages() {
         if (images != null) {
-            images.clear();
+            images.clearImages();
         }
     }
     
-    private static final int IMAGE_EXPIRE_MINUTES = 4*60;
-    
     /**
-     * Set unused EmoticonImage objects to be garbage collected. Should only be
-     * called from the EDT.
-     * 
-     * @return 
+     * Set unused image objects to be garbage collected. Should only be called
+     * from the EDT.
+     *
+     * @param imageExpireMinutes
+     * @return
      */
-    public int clearOldImages() {
+    public int clearOldImages(int imageExpireMinutes) {
         if (images != null) {
-            Set<EmoticonImage> toRemove = new HashSet<>();
-            Iterator<EmoticonImage> it = images.strongIterator();
-            while (it.hasNext()) {
-                EmoticonImage image = it.next();
-                if (image.getLastUsedAge() > IMAGE_EXPIRE_MINUTES*60*1000) {
-                    toRemove.add(image);
-                }
-            }
-            for (EmoticonImage image : toRemove) {
-                images.markWeak(image);
-            }
-            return toRemove.size();
+            return images.clearOldImages(imageExpireMinutes);
         }
         return 0;
     }
@@ -634,7 +641,7 @@ public class Emoticon {
      * @param user
      * @return 
      */
-    public EmoticonImage getIcon(EmoticonUser user) {
+    public CachedImage<Emoticon> getIcon(CachedImageUser user) {
         return getIcon(1, 0, ImageType.STATIC, user);
     }
     
@@ -676,6 +683,10 @@ public class Emoticon {
         }
     }
     
+    private void removeCachedSize() {
+        EmoticonSizeCache.removeSize(getCachedSizeId());
+    }
+    
     /**
      * Get the size of this emoticon without scaling. If no size was given when
      * creating the Emoticon, the size is looked up in the size cache or if that
@@ -694,225 +705,6 @@ public class Emoticon {
             }
         }
         return new Dimension(width, height);
-    }
-    
-    /**
-     * Scale the given Dimension based on the given settings. Also checks if the
-     * resulting size is within reasonable boundaries.
-     *
-     * @param d The dimension to modify
-     * @param scaleFactor The scale factor, values smaller or equal to 0 are
-     * ignored
-     * @param maxHeight The maximum height, values smaller or equal to 0 are
-     * ignored
-     * @return A new Dimension that has been scaled accordingly
-     */
-    private static Dimension getScaledSize(Dimension d, float scaleFactor, int maxHeight) {
-        float scaledWidth = d.width;
-        float scaledHeight = d.height;
-        
-        if (scaleFactor > 0) {
-            scaledWidth *= scaleFactor;
-            scaledHeight *= scaleFactor;
-        }
-        
-        if (maxHeight > 0 && scaledHeight > maxHeight) {
-            scaledWidth = scaledWidth / (scaledHeight / maxHeight);
-            scaledHeight = maxHeight;
-        }
-        
-        /**
-         * Convert into int before checking
-         */
-        int resultWidth = (int)scaledWidth;
-        int resultHeight = (int)scaledHeight;
-        if (resultWidth < 1) {
-            resultWidth = 1;
-        }
-        if (resultHeight < 1) {
-            resultHeight = 1;
-        }
-        
-        /**
-         * This shouldn't really happen, but just in case, so no ridicously
-         * huge (default) image is created.
-         */
-        if (resultWidth > MAX_SCALED_WIDTH) {
-            resultWidth = MAX_SCALED_WIDTH;
-        }
-        if (resultHeight > MAX_SCALED_HEIGHT) {
-            resultHeight = MAX_SCALED_HEIGHT;
-        }
-        return new Dimension(resultWidth, resultHeight);
-    }
-    
-    /**
-     * Gets the size from the image, including correcting for the given URL
-     * factor for Twitch emotes.
-     * 
-     * @param icon The ImageIcon to get the size from
-     * @param urlFactor Only 1 and 2 should be valid at the moment
-     * @return The size of the given image
-     */
-    private Dimension getSizeFromImage(ImageIcon icon, int urlFactor) {
-        int imageWidth = icon.getIconWidth();
-        int imageHeight = icon.getIconHeight();
-        if (urlFactor > 1) {
-            imageWidth /= urlFactor;
-            imageHeight /= urlFactor;
-        }
-        return new Dimension(imageWidth, imageHeight);
-    }
-    
-    private Image getScaledImage(Image img, int w, int h) {
-        return img.getScaledInstance(w, h, Image.SCALE_SMOOTH);
-    }
-    
-
-    /**
-     * A Worker class to load the Icon. Not doing this in it's own thread
-     * can lead to lag when a lot of new icons are being loaded.
-     */
-    private class IconLoader extends SwingWorker<ImageIcon,Object> {
-
-        private final EmoticonImage image;
-        
-        public IconLoader(EmoticonImage image) {
-            this.image = image;
-        }
-        
-        @Override
-        protected ImageIcon doInBackground() throws Exception {
-            
-            // Get the assumed size or size loaded from the size cache
-            Dimension defaultSize = getDefaultSize();
-            Dimension scaledSize = getScaledSize(defaultSize, image.scaleFactor,
-                    image.maxHeight);
-            
-            //System.out.println(defaultSize+" "+scaledSize+" "+image);
-            
-            // Determine which URL to load the image from
-            String url = Emoticon.this.url;
-            int urlFactor = 1;
-            if (type == Type.TWITCH || type == Type.CUSTOM2 || type == Type.BTTV || type == Type.FFZ || type == Type.EMOJI) {
-                if (scaledSize.width > defaultSize.width) {
-                    urlFactor = 2;
-                    if (isAnimated() && (float)scaledSize.width / defaultSize.width < 1.6) {
-                        // For animated emotes, which currently are not resized,
-                        // only load the 2x version if scale is high enough,
-                        // otherwise it just looks ridiculous
-                        urlFactor = 1;
-                    }
-                }
-                String builtUrl = getEmoteUrl(urlFactor, image.imageType);
-                if (builtUrl == null) {
-                    LOGGER.warning("Couldn't build URL for "+type+"/"+code);
-                    //return null;
-                } else {
-                    url = builtUrl;
-                }
-            }
-
-            ImageIcon icon = loadEmote(url);
-            image.setLoadedFrom(url);
-            
-            /**
-             * If an error occured loading the image, return null.
-             */
-            if (icon == null) {
-                return null;
-            }
-            
-            /**
-             * Only doing this on ERRORED, waiting for COMPLETE would not allow
-             * animated GIFs to load
-             */
-            if (icon.getImageLoadStatus() == MediaTracker.ERRORED) {
-                icon.getImage().flush();
-                return null;
-            }
-            
-            /**
-             * Determine the size to actually scale the image to. If a size has
-             * already been specified (when importing the emote from an API or
-             * when no size was given but the actual image size was set before)
-             * then use the scaledSize as calculated before. Otherwise use the
-             * actual size from the image to calculate the scaled targetSize.
-             */
-            Dimension actualImageSize = getSizeFromImage(icon, urlFactor);
-            Dimension targetSize;
-            if (width == -1 || height == -1) {
-                targetSize = getScaledSize(actualImageSize, image.scaleFactor,
-                    image.maxHeight);
-            } else {
-                targetSize = scaledSize;
-            }
-            
-            /**
-             * Scale to targetSize, unless image is already the correct size.
-             * Don't resize files ending on .gif, which should only apply to
-             * some BTTV emotes which are animated. Filename is not necessarily
-             * available though, it also seems like animated GIFs are not fully
-             * loaded according to the MediaTracker though, so check that as
-             * well. Not quite sure what that means exactly though.
-             */
-            boolean gif = isAnimated || (icon.getDescription() != null && icon.getDescription().startsWith("GIF"));
-            if ((icon.getIconWidth() != targetSize.width
-                    || icon.getIconHeight() != targetSize.height)
-                    && !gif) {
-                Image scaled = getScaledImage(icon.getImage(), targetSize.width,
-                        targetSize.height);
-                icon.setImage(scaled);
-            } else if (icon.getIconWidth() > MAX_SCALED_WIDTH
-                    || icon.getIconHeight() > MAX_SCALED_HEIGHT) {
-                // Fail-safe for accidentally large images that can't be scaled
-                // (e.g. GIF)
-                return null;
-            }
-
-            /**
-             * If no size is set for the image, use the actual image size (and
-             * save it for later if not the default emote size).
-             */
-            if (width == -1 || height == -1) {
-                width = actualImageSize.width;
-                height = actualImageSize.height;
-                if (width != DEFAULT_WIDTH || height != DEFAULT_HEIGHT) {
-                    // setCachedSize checks for type
-                    setCachedSize(width, height);
-                }
-            }
-            return icon;
-        }
-        
-        private ImageIcon loadEmote(String url) {
-            try {
-                return ImageCache.getImage(new URL(url), "emote_" + type, CACHE_TIME);
-            } catch (MalformedURLException ex) {
-                LOGGER.warning("Invalid url for " + code + ": " + url);
-                return null;
-            }
-        }
-        
-        /**
-         * The image should be done loading, replace the defaulticon with the
-         * actual loaded icon and tell the user that it's loaded.
-         */
-        @Override
-        protected void done() {
-            try {
-                // This is null if an error occured
-                ImageIcon loadedIcon = get();
-                if (loadedIcon == null) {
-                    image.setLoadingError();
-                } else {
-                    image.setImageIcon(loadedIcon, true);
-                }
-                image.setLoadingDone();
-            } catch (InterruptedException | ExecutionException ex) {
-                LOGGER.warning("Unexpected error when loading emoticon: "+ex);
-            }
-        }
     }
     
     @Override
@@ -985,243 +777,4 @@ public class Emoticon {
         return hash;
     }
 
-    public static interface EmoticonUser {
-
-        void iconLoaded(Image oldImage, Image newImage, boolean sizeChanged);
-    }
-    
-    /**
-     * A single image for this emoticon which may be scaled. Each emote can have
-     * more than one image, when images with different scaling have been
-     * requested.
-     * 
-     * <p>
-     * The actual image is loaded asynchronous once {@link getImageIcon()} is
-     * called.
-     * </p>
-     */
-    public class EmoticonImage {
-        
-        private ImageIcon icon;
-        public final float scaleFactor;
-        public final int maxHeight;
-        public final ImageType imageType;
-        
-        private Set<EmoticonUser> users;
-      
-        /**
-         * The source the image was loaded from. This may not be the same for
-         * all images, because image providers may have different URLs for
-         * different image sizes.
-         */
-        private String loadedFrom;
-        
-        private boolean loading = false;
-        private boolean loadingError = false;
-        private boolean isLoaded = false;
-        private volatile int loadingAttempts = 0;
-        private long lastLoadingAttempt;
-        private long lastUsed;
-        
-        public EmoticonImage(float scaleFactor, int maxHeight, ImageType imageType) {
-            this.scaleFactor = scaleFactor;
-            this.maxHeight = maxHeight;
-            this.imageType = imageType;
-        }
-        
-        /**
-         * Gets the ImageIcon for this EmoticonImage. When this is called for
-         * the first time, the image will be loaded asynchronously and a
-         * temporary default image of the same size is returned (if the size is
-         * known, otherwise it is based on the default size).
-         *
-         * @return 
-         */
-        public ImageIcon getImageIcon() {
-            lastUsed = System.currentTimeMillis();
-            if (icon == null) {
-                /**
-                 * Note: The temporary image (as well as the actual image) are
-                 * used as a key for GIF handling in ChannelTextPane, so it is
-                 * important not to reuse the same temporary image across
-                 * different emotes.
-                 */
-                icon = getDefaultIcon();
-                if (type != Type.NOT_FOUND_FAVORITE) {
-                    loadImage();
-                }
-            } else if (loadingError) {
-                if (loadImage()) {
-                    LOGGER.warning("Trying to load " + code + " again (" + loadedFrom + ")");
-                }
-            }
-            return icon;
-        }
-        
-        public long getLastUsedAge() {
-            return System.currentTimeMillis() - lastUsed;
-        }
-        
-        /**
-         * Get the Emoticon object this EmoticonImage is a part of.
-         *
-         * @return
-         */
-        public Emoticon getEmoticon() {
-            return Emoticon.this;
-        }
-
-        /**
-         * Gets the URL in String form where the image was loaded from.
-         * 
-         * @return The URL or null if the image hasn't been loaded yet
-         */
-        public String getLoadedFrom() {
-            return loadedFrom;
-        }
-        
-        /**
-         * Try to load the image, if it's not already loading and if the max
-         * loading attempts are not exceeded.
-         *
-         * @return true if the image will be attempted to be loaded, false
-         * otherwise
-         */
-        private boolean loadImage() {
-            if (!loading && loadingAttempts < MAX_LOADING_ATTEMPTS
-                    && System.currentTimeMillis() - lastLoadingAttempt > LOADING_ATTEMPT_DELAY) {
-                loading = true;
-                loadingError = false;
-                loadingAttempts++;
-                lastLoadingAttempt = System.currentTimeMillis();
-                (new IconLoader(this)).execute();
-                return true;
-            }
-            return false;
-        }
-        
-        private void setLoadingError() {
-            setImageIcon(new ImageIcon(getDefaultImage(true)), false);
-            loadingError = true;
-        }
-        
-        public void setImageIcon(ImageIcon newIcon, boolean success) {
-            if (icon == null) {
-                setDefaultIcon();
-            }
-            boolean sizeChanged = icon.getIconWidth() != newIcon.getIconWidth()
-                    || icon.getIconHeight() != newIcon.getIconHeight();
-            Image oldImage = icon.getImage();
-            icon.setImage(newIcon.getImage());
-            icon.setDescription(newIcon.getDescription());
-            if (success) {
-                setLoaded();
-            }
-            informUsers(oldImage, newIcon.getImage(), sizeChanged);
-        }
-        
-        private void setLoadedFrom(String url) {
-            this.loadedFrom = url;
-        }
-        
-        public boolean isAnimated() {
-            return Emoticon.this.isAnimated() ||
-                    (icon != null && icon.getDescription() != null && icon.getDescription().startsWith("GIF"));
-        }
-        
-        /**
-         * Either error or successfully loaded.
-         */
-        private void setLoadingDone() {
-            loading = false;
-        }
-        
-        private void setLoaded() {
-            isLoaded = true;
-        }
-        
-        public boolean isLoaded() {
-            return isLoaded;
-        }
-        
-        private void addUser(EmoticonUser user) {
-            if (users == null) {
-                users = Collections.newSetFromMap(
-                        new WeakHashMap<EmoticonUser, Boolean>());
-            }
-            users.add(user);
-        }
-        
-        private void informUsers(Image oldImage, Image newImage, boolean sizeChanged) {
-            for (EmoticonUser user : users) {
-                user.iconLoaded(oldImage, newImage, sizeChanged);
-            }
-        }
-        
-        /**
-         * Construct a default icon based on the size of this emoticon.
-         *
-         * @return
-         */
-        private ImageIcon getDefaultIcon() {
-            return new ImageIcon(getDefaultImage(false));
-        }
-        
-        public void setDefaultIcon() {
-            icon = getDefaultIcon();
-        }
-        
-        /**
-         * Construct a default image based on the size of this emoticon.
-         *
-         * @param error If true, uses red color to indicate an error.
-         * @return
-         */
-        private Image getDefaultImage(boolean error) {
-            // Determine the assumed size of the emote, for the placerholder image
-            Dimension d = getScaledSize(getDefaultSize(), scaleFactor, maxHeight);
-            int width = d.width;
-            int height = d.height;
-
-            BufferedImage res = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-
-            Graphics g = res.getGraphics();
-            ((Graphics2D) g).setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-            g.setColor(Color.LIGHT_GRAY);
-            if (error) {
-                g.setColor(Color.red);
-            }
-            int sWidth = g.getFontMetrics().stringWidth("[x]");
-            g.drawString("[x]", width / 2 - sWidth / 2, height / 2);
-
-            g.dispose();
-            return res;
-        }
-        
-        
-
-        @Override
-        public String toString() {
-            return scaleFactor+"/"+maxHeight+"/"+icon;
-        }
-        
-        /**
-         * Builds a String of the size of this image, including the original
-         * size if there is a scaled size, meant for display.
-         * 
-         * @return The String containing the width and height
-         */
-        public String getSizeString() {
-            int scaledWidth = icon.getIconWidth();
-            int scaledHeight = icon.getIconHeight();
-            if (width == -1 || height == -1) {
-                return scaledWidth+"x"+scaledHeight;
-            }
-            if (scaledWidth != width || scaledHeight != height) {
-                return scaledWidth + "x" + scaledHeight + " (" + width + "x" + height + ")";
-            }
-            return width + "x" + height;
-        }
-    }
 }
