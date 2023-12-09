@@ -17,6 +17,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import chatty.util.api.CachedImage.CachedImageUser;
+import chatty.util.seventv.WebPUtil;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -116,6 +117,7 @@ public class Emoticon {
     private ArrayList<String> infos;
     private String emotesetInfo;
     private boolean isAnimated;
+    private final boolean isZeroWidth;
     
     private volatile int width;
     private volatile int height;
@@ -151,6 +153,7 @@ public class Emoticon {
         private String stringIdAlias = null;
         private String creator;
         private boolean isAnimated = false;
+        private boolean isZeroWidth = false;
         
         public Builder(Type type, String search, String url) {
             this.type = type;
@@ -234,6 +237,11 @@ public class Emoticon {
             return this;
         }
         
+        public Builder setZeroWidth(boolean isZeroWidth) {
+            this.isZeroWidth = isZeroWidth;
+            return this;
+        }
+        
         public Builder setSubType(SubType subtype) {
             this.subtype = subtype;
             return this;
@@ -295,21 +303,34 @@ public class Emoticon {
         String result = url;
         result = result.replace("{{id}}", id);
         result = result.replace("{{image}}", factor + "x");
+        if (WebPUtil.shouldUseWebP()) {
+            result += ".webp";
+        }
         return result;
     }
     
     public String getFFZUrl(int factor) {
+        String gif = isAnimated() && !WebPUtil.shouldUseWebP() ? ".gif" : "";
         if (factor == 2 && urlX2 != null) {
-            return urlX2;
+            return urlX2+gif;
         }
-        return url;
+        return url+gif;
     }
     
     public String getSevenTVEmoteUrl(String id, int factor) {
-        if (StringUtil.isNullOrEmpty(id) || factor > 4) {
+        if (StringUtil.isNullOrEmpty(id) || StringUtil.isNullOrEmpty(url) || factor > 4) {
             return null;
         }
-        return String.format("https://cdn.7tv.app/emote/%s/%dx", id, factor);
+        String result = url.replace("{size}", factor+"x");
+        if (!WebPUtil.shouldUseWebP()) {
+            if (isAnimated()) {
+                result = result.replace(".webp", ".gif");
+            }
+            else {
+                result = result.replace(".webp", ".png");
+            }
+        }
+        return result;
     }
 
     /**
@@ -372,6 +393,7 @@ public class Emoticon {
             this.infos.trimToSize();
         }
         this.isAnimated = builder.isAnimated;
+        this.isZeroWidth = builder.isZeroWidth;
         this.subType = builder.subtype;
     }
     
@@ -509,6 +531,10 @@ public class Emoticon {
         this.isAnimated = isAnimated;
     }
     
+    public synchronized boolean isZeroWidth() {
+        return isZeroWidth;
+    }
+    
     public boolean hasGlobalEmoteset() {
         return isGlobalEmoteset(emoteset);
     }
@@ -602,7 +628,7 @@ public class Emoticon {
 
                 @Override
                 public boolean loadImage() {
-                    return true;
+                    return imageType != ImageType.TEMP;
                 }
             }, ("emote_" + type).intern());
         }

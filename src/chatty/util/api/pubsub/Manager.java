@@ -134,6 +134,16 @@ public class Manager {
     }
     
     /**
+     * Only changes token. Updating username may be problematic since the user
+     * id may be in the topics.
+     * 
+     * @param token 
+     */
+    public void updateToken(String token) {
+        c.updateToken(token);
+    }
+    
+    /**
      * Start receiving the modlog for the given channel (username). The token is
      * requires to authenticate.
      * 
@@ -144,6 +154,7 @@ public class Manager {
         this.token = token;
         addTopic(new ModLog(username));
         addTopic(new AutoMod(username));
+        addTopic(new LowTrustUsers(username));
     }
     
     /**
@@ -154,6 +165,7 @@ public class Manager {
     public void unlistenModLog(String username) {
         removeTopic(new ModLog(username));
         removeTopic(new AutoMod(username));
+        removeTopic(new LowTrustUsers(username));
     }
     
     public void listenUserModeration(String username, String token) {
@@ -461,17 +473,17 @@ public class Manager {
 
     }
 
-    private class Predictions extends StreamTopic
-    {
-        Predictions(String stream){
+    private class LowTrustUsers extends StreamTopic {
+
+        LowTrustUsers(String stream) {
             super(stream);
         }
 
         @Override
         public String make() {
             String userId = getUserId(stream);
-            if (userId != null) {
-                return "predictions-channel-v1."+userId;
+            if (userId != null && localUserId != null) {
+                return "low-trust-users." + localUserId + "." + userId;
             }
             return null;
         }

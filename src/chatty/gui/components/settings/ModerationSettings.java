@@ -65,6 +65,12 @@ public class ModerationSettings extends SettingsPanel {
         modInfoPanel.add(new JLabel(SettingConstants.HTML_PREFIX
                 + "Approve/deny AutoMod messages in chat through their context menu (right-click) or the User Dialog (left-click) or <code>Extra - AutoMod</code>."),
                 d.makeGbc(1, 6, 2, 1, GridBagConstraints.CENTER));
+
+        modInfoPanel.add(d.addSimpleBooleanSetting("showLowTrustInfo"),
+            d.makeGbc(0, 7, 3, 1, GridBagConstraints.WEST));
+        
+        modInfoPanel.add(d.addSimpleBooleanSetting("showRestrictedMessages"),
+            d.makeGbc(0, 8, 3, 1, GridBagConstraints.WEST));
         
         //==========================
         // User Dialog
@@ -150,7 +156,7 @@ public class ModerationSettings extends SettingsPanel {
         SettingsUtil.addSubsettings(repeatMsg, repeatMsgPanel.getComponents());
         
         JButton testSim = new JButton("Test Similarity");
-        testSim.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
+        GuiUtil.smallButtonInsets(testSim);
         testSim.addActionListener(e -> {
             new TestSimilarity(d, ignoredChars.getText()).setVisible(true);
         });
@@ -252,8 +258,8 @@ public class ModerationSettings extends SettingsPanel {
             JButton ignoredCharsClear = new JButton("Clear");
             ignoredCharsClear.addActionListener(e -> ignoredChars.setText(null));
             
-            ignoredCharsLoad.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
-            ignoredCharsClear.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
+            GuiUtil.smallButtonInsets(ignoredCharsLoad);
+            GuiUtil.smallButtonInsets(ignoredCharsClear);
             
             ignorePanel.add(ignoredCharsLoad);
             ignorePanel.add(ignoredCharsClear);
@@ -327,6 +333,8 @@ public class ModerationSettings extends SettingsPanel {
                     SettingsDialog.makeNoGapGbc(0, 2, 1, 1, GridBagConstraints.WEST));
             add(makeOption(PastMessages.AUTO_MOD, "autoMod"),
                     SettingsDialog.makeNoGapGbc(1, 2, 1, 1, GridBagConstraints.WEST));
+            add(makeOption(PastMessages.LOW_TRUST, "lowTrust"),
+                    SettingsDialog.makeNoGapGbc(0, 3, 2, 1, GridBagConstraints.WEST));
         }
         
         private JCheckBox makeOption(int option, String labelKey) {
@@ -360,9 +368,9 @@ public class ModerationSettings extends SettingsPanel {
                 entry.getValue().setSelected((setting & entry.getKey()) != 0);
             }
         }
-        
+
     }
-    
+        
     public static void main(String[] args) {
         new TestSimilarity(null, "?").setVisible(true);
     }

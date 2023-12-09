@@ -4,6 +4,7 @@ package chatty.util.api;
 import chatty.util.ImageCache;
 import chatty.util.ImageCache.ImageRequest;
 import chatty.util.ImageCache.ImageResult;
+import chatty.util.gif.AnimatedImageSource;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics;
@@ -116,7 +117,7 @@ public class CachedImage<T> {
     }
 
     public static enum ImageType {
-        STATIC, ANIMATED_DARK, ANIMATED_LIGHT
+        STATIC, ANIMATED_DARK, ANIMATED_LIGHT, TEMP
     }
     
     public final float scaleFactor;
@@ -135,6 +136,8 @@ public class CachedImage<T> {
      * images, because image providers may have different URLs for different
      * image sizes.
      */
+    private String sourceUrl;
+    
     private String loadedFrom;
 
     private boolean loading = false;
@@ -178,7 +181,7 @@ public class CachedImage<T> {
         }
         else if (loadingError) {
             if (loadImage()) {
-                LOGGER.warning("Trying to load " + object + " again (" + loadedFrom + ")");
+                LOGGER.warning("Trying to load " + object + " again (" + sourceUrl + ")");
             }
         }
         return icon;
@@ -198,11 +201,20 @@ public class CachedImage<T> {
     }
 
     /**
-     * Gets the URL in String form where the image was loaded from.
+     * Gets where the image has originally been downloaded from.
      *
      * @return The URL or null if the image hasn't been loaded yet
      */
-    public String getLoadedFrom() {
+    public String getSourceUrl() {
+        return sourceUrl;
+    }
+    
+    /**
+     * Gets where the image actually has been loaded from (could be cache file).
+     *
+     * @return The URL or null if the image hasn't been loaded yet
+     */
+    public String getLoadedFromUrl() {
         return loadedFrom;
     }
 
@@ -245,14 +257,19 @@ public class CachedImage<T> {
         informUsers(oldImage, newIcon.getImage(), sizeChanged);
     }
 
-    private void setLoadedFrom(String url) {
+    private void setSourceUrl(String url) {
+        this.sourceUrl = url;
+    }
+    
+    private void setLoadedFromUrl(String url) {
         this.loadedFrom = url;
     }
 
     public boolean isAnimated() {
         boolean emoteAnimated = object instanceof Emoticon ? ((Emoticon) object).isAnimated() : false;
         boolean imageLoadedAsGif = icon != null && icon.getDescription() != null && icon.getDescription().startsWith("GIF");
-        return emoteAnimated || imageLoadedAsGif;
+        boolean imageAnimatedSource = icon.getImage().getSource() instanceof AnimatedImageSource;
+        return emoteAnimated || imageLoadedAsGif || imageAnimatedSource;
     }
 
     /**
@@ -391,7 +408,8 @@ public class CachedImage<T> {
             }
 
             ImageResult result = ImageCache.getImage(request, prefix, CACHE_TIME);
-            image.setLoadedFrom(request.getRequestedURL().toString());
+            image.setSourceUrl(request.getRequestedURL().toString());
+            image.setLoadedFromUrl(request.getLoadFromURL().toString());
 
             /**
              * If an error occured loading the image, return null.

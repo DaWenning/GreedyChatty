@@ -8,6 +8,7 @@ import chatty.gui.components.Channel;
 import chatty.gui.components.menus.ContextMenuListener;
 import chatty.gui.components.menus.TabContextMenu;
 import chatty.gui.components.settings.TabSettings;
+import chatty.gui.transparency.TransparencyManager;
 import chatty.lang.Language;
 import chatty.util.Debugging;
 import chatty.util.IconManager;
@@ -154,6 +155,7 @@ public class Channels {
                 if ((!channels.isEmpty() || defaultChannel != null) && !dock.isMainEmpty()) {
                     channelChanged();
                 }
+                TransparencyManager.check();
                 Debugging.println("dnda", "Path: %s", content.getPath());
             }
             
@@ -210,6 +212,7 @@ public class Channels {
             @Override
             public void contentRemoved(DockContent content) {
                 checkDefaultChannel();
+                TransparencyManager.check();
             }
 
         });
@@ -229,6 +232,7 @@ public class Channels {
         });
         KeyChecker.watch(KeyEvent.VK_SHIFT);
         KeyChecker.watch(KeyEvent.VK_CONTROL);
+        instance = this;
     }
     
     public void init() {
@@ -271,6 +275,7 @@ public class Channels {
         dock.setSetting(DockSetting.Type.LINE_COLOR, UIManager.getColor("TextField.selectionForeground"));
         dock.setSetting(DockSetting.Type.POPOUT_TYPE_DRAG, getPopoutTypeValue((int)gui.getSettings().getLong("tabsPopoutDrag")));
         dock.setSetting(DockSetting.Type.DIVIDER_SIZE, 7);
+        dock.setSetting(DockSetting.Type.NO_SINGLE, !gui.getSettings().getBoolean("tabsHideIfSingle"));
         updateTabComparator();
         updateKeepEmptySetting();
     }
@@ -563,6 +568,11 @@ public class Channels {
                     closingChannels.put(id, channel);
                 }
                 gui.client.closeChannel(id);
+            }
+        }
+        else if (id.startsWith("'")) {
+            if (add) {
+                gui.routingManager.addTarget(id.replace("'", ""));
             }
         }
         else {
@@ -1186,6 +1196,16 @@ public class Channels {
         if (changeListener != null) {
             changeListener.stateChanged(new ChangeEvent(this));
         }
+    }
+    
+    /**
+     * For accessing this instance for the $input() function. Not my favorite
+     * way of doing this, but it'll do for now.
+     */
+    private static Channels instance;
+    
+    public static Channels getInstance() {
+        return instance;
     }
     
     /**

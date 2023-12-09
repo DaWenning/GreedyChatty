@@ -364,6 +364,20 @@ public class TwitchConnection {
         connect();
     }
     
+    public void setLogin(String username, String password) {
+        if (username.equals(this.username) && password.equals(this.password)) {
+            // Nothing changed
+            return;
+        }
+        this.username = username;
+        this.password = password;
+        users.setLocalUsername(username);
+        if (irc.getState() != Irc.STATE_OFFLINE) {
+            disconnect();
+            reconnect();
+        }
+    }
+    
     /**
      * Connect to the main connection based on the current login data. Will only
      * connect it not already connected/connecting.
@@ -371,7 +385,12 @@ public class TwitchConnection {
     private void connect() {
         if (irc.getState() <= Irc.STATE_OFFLINE) {
             cancelReconnectionTimer();
-            irc.connect(server,serverPorts,username,password, getSecuredPorts());
+            new Thread("IRC connect") {
+                @Override
+                public void run() {
+                    irc.connect(server, serverPorts, username, password, getSecuredPorts());
+                }
+            }.start();
         } else {
             listener.onConnectError("Already connected or connecting.");
         }
@@ -449,6 +468,10 @@ public class TwitchConnection {
     public boolean command(String channel, String command, String parameters,
             String msgId) {
         return twitchCommands.command(channel, msgId, command, parameters);
+    }
+    
+    public void addNewCommands(Commands commands, TwitchClient client) {
+        twitchCommands.addNewCommands(commands, client);
     }
     
     public void sendCommandMessage(String channel, String message, String echo) {
@@ -686,21 +709,24 @@ public class TwitchConnection {
         }
 
         @Override
+        void onConnectionPrepare(String server) {
+            listener.onConnectionPrepare(server);
+        }
+        
+        @Override
         void onConnectionAttempt(String server, int port, boolean secured) {
             connectionAttempts++;
             if (this != irc) {
                 return;
             }
-            
-            if (server != null) {
-                listener.onGlobalInfo(Language.getString("chat.connecting",
-                        server+":"+port)
-                        +(secured ? " ("+Language.getString("chat.secured")+")" : ""));
-            } else {
-                listener.onGlobalInfo("Failed to connect (server or port invalid)");
-            }
+            listener.onConnectAttempt(server, port, secured);
         }
-
+        
+        @Override
+        void onConnectionAttemptCancel() {
+            listener.onGlobalInfo(Language.getString("chat.cancelConnect"));
+        }
+        
         @Override
         void onConnect() {
             if (this == irc) {
@@ -747,12 +773,17 @@ public class TwitchConnection {
             
             if (this == irc) {
                 channelStates.reset();
-                twitchCommands.clearModsAlreadyRequested(null);
-                listener.onGlobalInfo(Language.getString("chat.disconnected",
-                        Helper.makeDisconnectReason(reason, reasonMessage)));
+                listener.onGlobalInfo(Language.getString("chat.disconnected")
+                        +Helper.makeDisconnectReason(reason, reasonMessage));
 
                 if (reason != Irc.REQUESTED_DISCONNECT) {
-                    startReconnectTimer(reason);
+                    if (irc.shouldCancelConnecting()) {
+                        listener.onGlobalInfo("Canceled reconnecting");
+                        connectionAttempts = 0;
+                    }
+                    else {
+                        startReconnectTimer(reason);
+                    }
                 } else {
                     connectionAttempts = 0;
                 }
@@ -857,7 +888,6 @@ public class TwitchConnection {
                         rejoin = true;
                     }
                     else {
-                        twitchCommands.clearModsAlreadyRequested(channel);
                         // Remove users for this channel, clearing the userlist in the
                         // GUI shouldn't be necessary if this channel is closed since
                         // the GUI userlist is removed as well.
@@ -1123,7 +1153,7 @@ public class TwitchConnection {
                     }
                     b.append(" (").append(recipients.size()).append(" total)");
                 }
-                listener.onSubscriberNotification(gifter, b.toString(), null, -1, null);
+                listener.onSubscriberNotification(gifter, b.toString(), null, -1, MsgTags.EMPTY);
                 this.gifter = null;
                 this.text = null;
                 this.subPlan = null;
@@ -1158,6 +1188,7 @@ public class TwitchConnection {
                 months = tags.getInteger("msg-param-months", -1);
             }
             int giftMonths = tags.getInteger("msg-param-gift-months", -1);
+            int multiMonth = tags.getInteger("msg-param-multimonth-duration", -1);
             
             if (tags.isValue("msg-id", "announcement") && !StringUtil.isNullOrEmpty(login)) {
                 String displayName = tags.get("display-name", login);
@@ -1184,6 +1215,9 @@ public class TwitchConnection {
                         recipient += " has";
                     }
                     text += " "+recipient+" subscribed for "+months+" months!";
+                }
+                if (multiMonth > 1 && !text.contains("in advance")) {
+                    text += " They subscribed for "+multiMonth+" months in advance.";
                 }
                 listener.onSubscriberNotification(user, text, message, months, tags);
             } else if (tags.isValue("msg-id", "charity") && login.equals("twitch")) {
@@ -1231,12 +1265,6 @@ public class TwitchConnection {
          * @param tags The associated tags, may be empty (never null)
          */
         private void infoMessage(String channel, String text, MsgTags tags) {
-            if (tags.isValue("msg-id", "host_on")) {
-                String hostedChannel = channelStates.getState(channel).getHosting();
-                if (!StringUtil.isNullOrEmpty(hostedChannel)) {
-                    tags = MsgTags.addTag(tags, "chatty-hosted", hostedChannel);
-                }
-            }
             if (text.startsWith("The moderators of")) {
                 parseModeratorsList(text, channel);
             } else {
@@ -1421,20 +1449,7 @@ public class TwitchConnection {
         public void onChannelCommand(MsgTags tags, String nick,
                 String channel, String command, String trailing) {
             channel = StringUtil.toLowerCase(channel);
-            if (command.equals("HOSTTARGET")) {
-                String[] parameters = trailing.split(" ");
-                if (parameters.length == 2) {
-                    String target = parameters[0];
-                    // Unhosting should be "-", but just to be safe
-                    if (!Helper.isRegularChannel(target)) {
-                        listener.onHost(rooms.getRoom(channel), null);
-                        channelStates.setHosting(channel, null);
-                    } else {
-                        listener.onHost(rooms.getRoom(channel), target);
-                        channelStates.setHosting(channel, target);
-                    }
-                }
-            } else if (command.equals("ROOMSTATE")) {
+            if (command.equals("ROOMSTATE")) {
                 if (!tags.isEmpty()) {
                     /**
                      * ROOMSTATE doesn't always have to contain all states, so
@@ -1610,6 +1625,10 @@ public class TwitchConnection {
 
         void onConnectionStateChanged(int state);
         
+        void onConnectionPrepare(String server);
+        
+        void onConnectAttempt(String server, int port, boolean secured);
+        
         void onEmotesets(String channel, Set<String> emotesets);
 
         void onConnectError(String message);
@@ -1619,8 +1638,6 @@ public class TwitchConnection {
         void onRawReceived(String text);
         
         void onRawSent(String text);
-        
-        void onHost(Room room, String target);
         
         void onChannelCleared(Room room);
         

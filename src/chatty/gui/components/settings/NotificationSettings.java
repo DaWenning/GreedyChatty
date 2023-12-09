@@ -2,8 +2,8 @@
 package chatty.gui.components.settings;
 
 import chatty.Chatty;
+import chatty.Chatty.PathType;
 import chatty.gui.GuiUtil;
-import static chatty.gui.GuiUtil.SMALL_BUTTON_INSETS;
 import chatty.gui.components.LinkLabel;
 import chatty.gui.notifications.Notification;
 import chatty.lang.Language;
@@ -24,6 +24,7 @@ import java.awt.event.ItemListener;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -197,7 +198,7 @@ public class NotificationSettings extends SettingsPanel {
         gbc = d.makeGbc(0, 2, 3, 1);
         gbc.insets = new Insets(3,10,3,8);
         
-        PathSetting path = new PathSetting(d, Chatty.getSoundDirectory());
+        PathSetting path = new PathSetting(d, Chatty.getDefaultPath(Chatty.PathType.SOUND).toString());
         d.addStringSetting("soundsPath", path);
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.weightx = 1;
@@ -209,7 +210,7 @@ public class NotificationSettings extends SettingsPanel {
         
         gbc = d.makeGbc(1, 3, 1, 1, GridBagConstraints.EAST);
         JButton rescanButton = new JButton("Rescan folder");
-        rescanButton.setMargin(SMALL_BUTTON_INSETS);
+        GuiUtil.smallButtonInsets(rescanButton);
         rescanButton.addActionListener(e -> {
             scanFiles(true);
         });
@@ -340,7 +341,15 @@ public class NotificationSettings extends SettingsPanel {
         });
         
         notificationsPanel.add(d.addSimpleBooleanSetting("nHideOnStart"),
-                d.makeGbc(0, 1, 1, 1, GridBagConstraints.WEST));
+                d.makeGbc(0, 1, 2, 1, GridBagConstraints.WEST));
+        
+        notificationsPanel.add(d.addSimpleBooleanSetting("nInfoMsgEnabled"),
+                d.makeGbc(0, 2, 1, 1, GridBagConstraints.WEST));
+        
+        gbc = d.makeGbcStretchHorizontal(1, 2, 1, 1);
+        gbc.insets = new Insets(5, 3, 5, 30);
+        notificationsPanel.add(d.addSimpleStringSetting("nInfoMsgTarget", 5, true),
+                gbc);
         
         String tip = StringUtil.randomString(new String[]{
             "Tip: Double-click on Sound column to directly open on the 'Sound' tab.",
@@ -349,7 +358,7 @@ public class NotificationSettings extends SettingsPanel {
         });
         GuiUtil.makeGbc(0, 1, 2, 1, GridBagConstraints.WEST);
         notificationsPanel.add(new JLabel(tip),
-                d.makeGbc(0, 2, 1, 1, GridBagConstraints.WEST));
+                d.makeGbc(0, 3, 2, 1, GridBagConstraints.WEST));
         
         //=======
         // Other
@@ -387,8 +396,15 @@ public class NotificationSettings extends SettingsPanel {
     
     
     protected void scanFiles(boolean showMessage) {
-        
         Path path = soundsPath.getCurrentPath();
+        if (path == null) {
+            if (showMessage) {
+                JOptionPane.showMessageDialog(this, "Invalid sound folder");
+            }
+            editor.setSoundFiles(Chatty.getPath(PathType.SETTINGS), new String[0]);
+            filesResult.setText("Error");
+            return;
+        }
         Debugging.println("scan Files "+path);
         File file = path.toFile();
         File[] files = file.listFiles(new WavFilenameFilter());
@@ -418,6 +434,10 @@ public class NotificationSettings extends SettingsPanel {
             JOptionPane.showMessageDialog(this, resultText+warningText);
         }
         filesResult.setText(resultText);
+    }
+
+    public void selectItem(long id) {
+        editor.setSelected(id);
     }
     
     private class MyButtonListener implements ActionListener {

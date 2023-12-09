@@ -44,8 +44,8 @@ public class PubSub extends JWSClient {
     }
 
     @Override
-    public void handleDisconnect() {
-        handler.handleDisconnect();
+    public void handleDisconnect(int code) {
+        handler.handleDisconnect(code);
     }
 
     @Override
@@ -85,6 +85,11 @@ public class PubSub extends JWSClient {
             sendListen(topic, false);
         }
         return unlisten;
+    }
+    
+    public void updateToken(String token) {
+        this.token = token;
+        reconnect();
     }
     
     public boolean hasTopic(String topic) {

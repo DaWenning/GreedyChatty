@@ -19,6 +19,8 @@
         | <a href="#Names">Names</a>
         | <a href="#Highlight">Highlight</a>
         | <a href="#Ignore">Ignore</a>
+        | <a href="#Filter">Filter</a>
+        | <a href="#Custom_Tabs">Custom Tabs</a>
         | <a href="#Log_to_file">Log to file</a>
         | <a href="#Window">Window</a>
         | <a href="#Tabs">Tabs</a>
@@ -160,7 +162,7 @@
         <li><code>$all</code> - All users, this can be used to specify a default
         color (should be put at the very end of the list)</li>
         <li><code>$broadcaster</code> - Broadcasters</li>
-        <li><code>$cat:&lt;category&gt;</code> - A category from the <a href="help.html#addressbook">Addressbook</a></li>
+        <li><code>$cat:&lt;category&gt;</code> - A category from the <a href="help-addressbook.html">Addressbook</a></li>
         <li><code>#&lt;color code&gt;</code> - A Html color code, e.g. <code>#0000FF</code> for blue, which can
             be used to replace colors</li>
         <li><code>$color:&lt;color code or name&gt;</code> - A Html color code or name (names
@@ -420,14 +422,20 @@
     
     <h3>Ignored Emotes</h3>
     <p>Emotes added to this list will not be turned into an image, but instead
-        are just shown as their emote code.</p>
-    <p>The code added to the list has to be the
-    exact code used internally to find the emote in the messages. Usually this is simply
-    the emote code as you would type it in chat, but some emotes have a special syntax
-    that you might not even know (e.g. <code>:)</code> has <code>\:-?\)</code> as actual code).
-    It is recommended to use the emote context menu (right-click on an emote in chat) to
-    ignore emotes, because then the correct code will automatically be added to
-    the list.</p>
+        are just shown as their emote code. They are also hidden from the Emote
+        Dialog and TAB Completion, unless you choose not to for specific emotes.</p>
+    
+    <p>The code added to the list has to be the exact code used internally to
+        find the emote in the messages. Usually this is simply the emote code as
+        you would type it in chat, but some emotes have a special syntax that
+        you might not even know (e.g. <code>:)</code> has <code>\:-?\)</code> as
+        actual code). There are more options available, see the Ignored Emotes
+        dialog in the Settings.</p>
+    
+    <p>It is recommended to use the emote context menu (right-click on an emote
+        in chat) to ignore emotes. That way the correct data will automatically
+        be added to the list and you can easily select additional options as to
+        where to hide the emote from.</p>
     
     <h3>
         <a name="EmoticonsLocal">Local Emotes</a>
@@ -963,7 +971,7 @@
             Behaves like the <code>regm:</code>/<code>re:</code> prefix, in that
             it always tries to match the entire username. Example:
             <code>reuser:(?i)a.*</code> would match all names starting with "a".</li>
-        <li><code>cat:</code> - One or several (comma separated) <a href="help.html#addressbook">Addressbook</a>
+        <li><code>cat:</code> - One or several (comma separated) <a href="help-addressbook.html">Addressbook</a>
             categories. The user who send the message must be in at least one of them.
             Example: <code>cat:friends,family</code> (the user must be in "friends" or "family", or both)</li>
         <li><code>!cat:</code> - One or several Addressbook categories.
@@ -972,7 +980,7 @@
             have been sent in. Example: <code>chan:joshimuz,tirean</code></li>
         <li><code>!chan:</code> - One or several channels the message must
             <em>not</em> have been sent in.</li>
-        <li><code>chanCat:</code> - One or several <a href="help.html#addressbook">Addressbook</a>
+        <li><code>chanCat:</code> - One or several <a href="help-addressbook.html">Addressbook</a>
             categories. The channel the message was send in must be in at least
             one of those categories (added to the Addressbook with the name of
             the channel, including leading #, e.g. <code>#esl_csgo</code>).</li>
@@ -1024,7 +1032,7 @@
                     first message of this user in this channel during the
                     current session (first message in User Dialog).<br />
                     The messages can be reset without restarting Chatty via the
-                    <a href="help.html#commands-clearUserMessages"><code>/clearUserMessages</code></a>
+                    <a href="help-builtin_commands.html#commands-clearUserMessages"><code>/clearUserMessages</code></a>
                     command, so that the prefix triggers again.<br />
                     To match on the first message of this user in the channel
                     overall, you can match on the message tags that Twitch
@@ -1076,6 +1084,10 @@
                     default in the "Substitutes / Lookalikes" dialog in the
                     Highlight settings (if no prefix is provided it will use the
                     default setting).</li>
+                <li><code>config:restricted</code> - Match messages by
+                    restricted users shown only for moderators. Note that
+                    messages by monitored users can not be matched yet.</li>
+                <li><code>config:hypechat</code> - Match Hype Chat messages.</li>
             </ul>
         </li>
         <li><a name="Highlight_Prefix-blacklist"><code>blacklist:</code></a> to specify one or more text patterns
@@ -1099,7 +1111,7 @@
             additional conditions that have an "or" relationship to eachother.
             This is a comma-separated list (enclose spaces and commas in quotes
             to ignore them) of Highlight items, whereas at least one has to
-            match.
+            match. Use <code>!if:</code> to negate the result.
             <br/><br />
             Prefixes in an item always have an "and" relationship, so they all
             have to match (<code>cat:abc user:a_name</code> requires the "abc"
@@ -1149,6 +1161,11 @@
                     In the Highlight settings you can also enable this for all
                     Highlight items, without having to apply this prefix to each
                     one.</li>
+                <li><code>config:hide</code> - Don't add the message to the
+                    Highlighted/Ignored Messages panel</li>
+                <li><code>config:!log</code> - Don't log the message to the
+                    separate highlighted/ignored log file (may still be logged
+                    to the channel log file)</li>
             </ul>
         </li>
         <li><code>n:</code> to provide a note that is ignored for matching.
@@ -1156,6 +1173,12 @@
             only <code>config:info startw:!quote</code> will have an effect
             (see <a href="#Highlight_Meta_Matching">Meta Prefixes (Matching)</a>
             on how quoting works).</li>
+        <li><code>to:</code> to provide one or several comma-separated names of
+            <a href="#Custom_Tabs">Custom Tabs</a> (case-insensitive) to copy
+            the message to. For example <code>to:Commands start:!</code> will
+            copy messages beginning with "!" to the Custom Tab named "Commands".
+            This is available for the settings Msg. Colours, Highlight, Ignore
+            and Custom Tabs Routing.</li>
     </ul>
     
     <p><em>Note:</em> If you're using the <code>color:</code> or <code>bgcolor:</code>
@@ -1370,10 +1393,6 @@
         <dt><code>user:name chan:tirean,gocnak</code></dt>
         <dd>Ignores the user with the name <code>name</code> in channels <code>#tirean</code> and <code>#gocnak</code></dd>
         
-        <dt><code>config:info subscribed to</code></dt>
-        <dd>Ignores the <code>x has subscribed to y</code> info messages that
-        you get when someone subscribes in the channel that is being hosted</dd>
-        
         <dt><code>cat:ignore !chan:lotsofs,joshimuz</code></dt>
         <dd>Ignores users in the addressbook category <code>ignore</code> in all channels,
             except <code>#lotsofs</code> and <code>#joshimuz</code></dd>
@@ -1465,6 +1484,26 @@
     
     <p>You can use <code>replacement:none</code> to output no replacement at
         all.</p>
+    
+    <h2>
+        <a name="Custom_Tabs">Custom Tabs</a>
+        <a href="#top" class="top">[back to menu]</a>
+    </h2>
+    <p>Custom Tabs can have messages routed to them by use of the <code>to:</code>
+        prefix in entries of the settings Msg. Colours, Highlight, Ignore and
+        Custom Tabs Routing. In addition, Notifications can be routed to Custom
+        Tabs as an Info Message ("Message" tab in the Notification editor).</p>
+    
+    <dl class="dl-settings">
+        <dt>Allow routing to several custom tabs</dt>
+        <dd>The routing targets defined with <code>to:</code> get collected from
+            each setting that has a match (e.g. Highlights and Msg. Colours). If
+            this setting is enabled, the same message may be routed to several
+            Custom Tabs and the Routing setting may match more than one entry.
+            If disabled only the first Custom Tab is used (which one is the
+            first is not well defined yet and may change in future Chatty
+            versions).</dd>
+    </dl>
     
     <h2>
         <a name="Log_to_file">Log to file</a>
@@ -1777,7 +1816,7 @@
             <a href="#Highlight">Highlighting</a> (although some prefixes won't
             work unless it's a chat message).</dd>
         
-        <dt>Notification (Tab)</dt>
+        <dt>Desktop Notification (Tab)</dt>
         <dd>A Desktop Notification, with customizable colors.</dd>
         
         <dt>Sound (Tab)</dt>
@@ -1798,6 +1837,13 @@
             it would play the sound after 5 minutes even if the chat has been
             busy non-stop, at which point you probably wouldn't need to be alerted
             since you're already paying attention to it.</dd>
+        
+        <dt>Message (Tab)</dt>
+        <dd>Output a message to <a href="#Custom_Tabs">Custom Tabs</a> as an
+            info message, with text similar to the Desktop Notification.</dd>
+        <dd>The <code>Custom Tab</code> field can contain one or several
+            comma-separated Custom Tab names. Commas can be quoted to not use as
+            a separator (same as <a href="#Highlight_Meta_Matching">Highlight Meta Prefixes</a>).</dd>
     </dl>
     
     <p>On both the <strong>Notification (Tab)</strong> and <strong>Sound (Tab)</strong>
@@ -1913,21 +1959,7 @@
     </dl>
     
     <h3>Other</h3>
-    <dl class="dl-settings">
-        <dt>Auto-Unhost when your stream goes live</dt>
-        <dd>Automatically
-            sends the <code>/unhost</code> command to your channel if you started
-            your stream session in the last 15 minutes and the stream status
-            changes (usually from offline -> live).<br />
-            For this to work, you need to have joined the channel in Chatty,
-            either with the broadcaster account (so your own account if it's
-            your stream) or with an account that is an editor in the channel
-            (in which case you also have to add the channel to the
-            <code>autoUnhostStreams</code> setting, via
-            <code>/add autoUnhostStreams &lt;streamName&gt;</code>, in order to
-            tell Chatty that you are authorized/want to use the automatic <code>/unhost</code>
-            feature in that channel).</dd>
-        
+    <dl class="dl-settings">        
         <dt>Prepend to window title</dt>
         <dd>Add some arbitrary text to the beginning of the window title. This
             can be useful if you run several instances of Chatty (to be able to

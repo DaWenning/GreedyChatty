@@ -56,9 +56,6 @@ public class ChannelCompletion implements AutoCompletionServer {
      * Can contain case, will be completed to that.
      */
     private final Set<String> commands = new TreeSet<>(Arrays.asList(new String[]{
-        "subscribers", "subscribersOff", "timeout", "ban", "unban", "host", "unhost", "raid", "unraid", "clear", "mods", "commercial",
-        "slow", "slowOff", "r9k", "r9koff", "emoteOnly", "emoteOnlyOff", "announce",
-        "followers", "followersoff", "untimeout",
     }));
     
     private final Set<String> settingCommands = new TreeSet<>(Arrays.asList(new String[]{
@@ -79,7 +76,7 @@ public class ChannelCompletion implements AutoCompletionServer {
      * Must be all lowercase for comparison.
      */
     private final Set<String> prefixesPreferUsernames = new HashSet<>(Arrays.asList(new String[]{
-        "/ban ", "/to ", "/setname ", "/resetname ", "/timeout ", "/host ",
+        "/ban ", "/to ", "/setname ", "/resetname ", "/timeout ",
         "/unban ", "/ignore ", "/unignore ", "/ignorechat ", "/unignorechat ",
         "/ignorewhisper ", "/unignorewhisper ", "/follow ", "/unfollow ",
         "/untimeout ", "/favorite ", "/unfavorite ", "@@"
@@ -237,7 +234,7 @@ public class ChannelCompletion implements AutoCompletionServer {
             return getCompletionItemsEmoji(search);
         }
         if (!emotePrefix.isEmpty() && prefix.endsWith(emotePrefix)) {
-            return getCompletionItemsEmotes(search, emotePrefix);
+            return sortFavoritesFirst(getCompletionItemsEmotes(search, emotePrefix));
         }
 
         // Then check settings
@@ -245,13 +242,13 @@ public class ChannelCompletion implements AutoCompletionServer {
             return getCompletionItemsNames(search, preferUsernames);
         }
         if (setting.equals("emotes")) {
-            return getCompletionItemsEmotes(search, "");
+            return sortFavoritesFirst(getCompletionItemsEmotes(search, ""));
         }
         if (setting.equals("custom")) {
             return AutoCompletionServer.CompletionItems.createFromStrings(getCustomCompletionItems(searchCase), "");
         }
         AutoCompletionServer.CompletionItems names = getCompletionItemsNames(search, preferUsernames);
-        AutoCompletionServer.CompletionItems emotes = getCompletionItemsEmotes(search, "");
+        AutoCompletionServer.CompletionItems emotes = sortFavoritesFirst(getCompletionItemsEmotes(search, ""));
         if (setting.equals("both")) {
             names.append(emotes);
             return names;
@@ -264,6 +261,7 @@ public class ChannelCompletion implements AutoCompletionServer {
     private AutoCompletionServer.CompletionItems getCompletionItemsEmotes(String search, String prefix) {
         Collection<Emoticon> allEmotes = new LinkedList<>();
         allEmotes.addAll(main.emoticons.getUsableGlobalTwitchEmotes());
+        allEmotes.addAll(main.emoticons.getUsableFollowerEmotes(channel.getStreamName()));
         allEmotes.addAll(main.emoticons.getUsableEmotesByStream(channel.getStreamName()));
         allEmotes.addAll(main.emoticons.getUsableGlobalOtherEmotes());
         List<Emoticon> result = filterCompletionItems(allEmotes, search, SORT_EMOTES_BY_NAME, item -> {
@@ -345,10 +343,11 @@ public class ChannelCompletion implements AutoCompletionServer {
         }
     };
     
-    private void sortFavoritesFirst(CompletionItems items) {
+    private CompletionItems sortFavoritesFirst(CompletionItems items) {
         if (settings().getBoolean("completionFavEmotesFirst")) {
             Collections.sort(items.items, SORT_FAV_EMOTES_FIRST);
         }
+        return items;
     }
 
     private List<String> getCustomCompletionItems(String search) {

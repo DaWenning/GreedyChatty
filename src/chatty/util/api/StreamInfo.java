@@ -5,7 +5,6 @@ import chatty.Helper;
 import chatty.util.DateTime;
 import chatty.util.ElapsedTime;
 import chatty.util.StringUtil;
-import chatty.util.api.StreamTagManager.StreamTag;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -55,7 +54,6 @@ public class StreamInfo {
     private String status = null;
     private StreamCategory game = StreamCategory.EMPTY;
     private int viewers = 0;
-    private List<StreamTag> communities;
     private long startedAt = -1;
     private long startedAtSameAfterOffline;
     private final ElapsedTime lastFollowedUpdate = new ElapsedTime();
@@ -262,7 +260,7 @@ public class StreamInfo {
                 addHistoryItem(System.currentTimeMillis(),
                         new StreamInfoHistoryItem(System.currentTimeMillis(),
                                 viewers, status, game.name,
-                                streamType, getCommunities(),
+                                streamType,
                                 getTimeStarted(), getTimeStartedWithPicnic()));
             }
             result = setUpdateSucceeded(true);
@@ -305,8 +303,16 @@ public class StreamInfo {
                     LOGGER.info("Ignored setting offline " + stream);
                 }
             }
-            // If switching from online to offline
-            else if (online && recheckOffline == -1) {
+            /**
+             * If switching from online to offline. Without recent updates (for
+             * example a followed stream went offline while not in the channel
+             * and isValidEnough() is false, then joining the offline channel)
+             * should not check this, since otherwise the previous online state
+             * will still appear (in the title etc.) until the recheck. Also,
+             * checking this if the stream hasn't been seen as online for hours
+             * doesn't make much sense anyway.
+             */
+            else if (online && recheckOffline == -1 && isValidEnough()) {
                 LOGGER.info("Waiting to recheck offline status for " + stream);
                 recheckOffline = System.currentTimeMillis();
             } else {
@@ -500,14 +506,6 @@ public class StreamInfo {
             return true;
         }
         return false;
-    }
-    
-    public synchronized void setCommunities(List<StreamTag> communities) {
-        this.communities = communities;
-    }
-    
-    public synchronized List<StreamTag> getCommunities() {
-        return communities;
     }
     
     public synchronized StreamType getStreamType() {

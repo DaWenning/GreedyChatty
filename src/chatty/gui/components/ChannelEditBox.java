@@ -1,7 +1,7 @@
 
 package chatty.gui.components;
 
-import chatty.gui.LaF;
+import chatty.gui.laf.LaF;
 import chatty.gui.components.completion.AutoCompletion;
 import chatty.gui.components.completion.AutoCompletionServer;
 import chatty.util.colors.ColorCorrectionNew;
@@ -49,7 +49,7 @@ public class ChannelEditBox extends JTextArea implements KeyListener,
     // Auto completion
     private final AutoCompletion autoCompletion;
     
-    public ChannelEditBox(int size) {
+    public ChannelEditBox() {
         autoCompletion = new AutoCompletion(this);
         autoCompletion.setFont(getFont());
         this.addKeyListener(this);

@@ -1,6 +1,7 @@
 
 package chatty.gui.components.textpane;
 
+import chatty.User;
 import chatty.gui.Highlighter.Match;
 import chatty.util.Pair;
 import chatty.util.irc.MsgTags;
@@ -37,7 +38,7 @@ public class InfoMessage {
     }
     
     public enum Type {
-        INFO, SYSTEM
+        INFO, SYSTEM, APPEND
     }
     
     public final long createdTime = System.currentTimeMillis();
@@ -53,6 +54,10 @@ public class InfoMessage {
     public List<Match> highlightMatches;
     public Object colorSource;
     public Object highlightSource;
+    public Object ignoreSource;
+    public Object routingSource;
+    public Object objectId;
+    public User localUser;
     
     public InfoMessage(Type msgType, String text) {
         this(msgType, text, MsgTags.EMPTY);
@@ -62,6 +67,27 @@ public class InfoMessage {
         this.msgType = msgType;
         this.text = text;
         this.tags = tags;
+    }
+    
+    public InfoMessage(InfoMessage other) {
+        msgType = other.msgType;
+        text = other.text;
+        tags = other.tags;
+        highlighted = other.highlighted;
+        hidden = other.hidden;
+        color = other.color;
+        bgColor = other.bgColor;
+        highlightMatches = other.highlightMatches;
+        colorSource = other.colorSource;
+        highlightSource = other.highlightSource;
+        ignoreSource = other.ignoreSource;
+        routingSource = other.routingSource;
+        objectId = other.objectId;
+        localUser = other.localUser;
+    }
+    
+    public InfoMessage copy() {
+        return new InfoMessage(this);
     }
     
     public static InfoMessage createInfo(String text) {
@@ -74,6 +100,12 @@ public class InfoMessage {
     
     public static InfoMessage createSystem(String text) {
         return new InfoMessage(Type.SYSTEM, text);
+    }
+    
+    public static InfoMessage createAppend(Object objectId, String text) {
+        InfoMessage m = new InfoMessage(Type.APPEND, text);
+        m.objectId = objectId;
+        return m;
     }
     
     public boolean isSystemMsg() {
@@ -109,8 +141,9 @@ public class InfoMessage {
     
     public Pair<String, String> getLink() {
         if (tags != null) {
-            if (tags.getHosted() != null) {
-                return new Pair<>("Join", "join."+tags.getHosted());
+            // When indicdes are set the join link is added differently
+            if (tags.getChannelJoin() != null && tags.getChannelJoinIndices() == null) {
+                return new Pair<>("Join", "join."+tags.getChannelJoin());
             }
         }
         return null;

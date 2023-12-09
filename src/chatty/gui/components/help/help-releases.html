@@ -17,6 +17,12 @@
     <h1><a name="top">Release Information</a></h1>
     
     <p>
+        <a href="#0.26">0.26</a> |
+        <a href="#0.25">0.25</a> |
+        <a href="#0.24.1">0.24.1</a> |
+        <a href="#0.24">0.24</a> |
+        <a href="#0.23">0.23</a> |
+        <a href="#0.22">0.22</a> |
         <a href="#0.21">0.21</a> |
         <a href="#0.20">0.20</a> |
         <a href="#0.19">0.19</a> |
@@ -70,11 +76,232 @@
     full list of changes.</p>
     
     <h2>
-        <a name="0.21">Version 0.21</a> <a name="latest">(This one!)</a> (2022-??-??)
+        <a name="0.26">Version 0.26</a> <a name="latest">(This one!)</a> (2023-??-??)
         <a href="#top" class="top">[back to top]</a>
     </h2>
     <pre>
-        Beta, TBD
+TBD
+    </pre>
+    
+    <h2>
+        <a name="0.25">Version 0.25</a> (2023-07-21)
+        <a href="#top" class="top">[back to top]</a>
+    </h2>
+    <pre>
+### Twitch Features
+- Added amount/currency next to Hype Chat messages, added `config:hypechat`
+  Highlighting prefix
+- Switched to new follower API (only allows moderators to see the list of
+  followers, count is visible for everyone though)
+- Added multi-month subs info to subscriber notifications
+- Improved badge tooltips based on updated API information
+
+### Custom Commands
+- Context Menu/User Dialog custom entries/buttons:
+  - Added ability to show entries only when they match certain restrictions
+    (for example based on channel or user status, see the Custom Commands help)
+  - Entries with empty labels now get removed, so using a required replacement
+    in a label can also serve to hide it based on certain conditions
+  - Added more context-specific parameters for use in labels and restrictions
+  - Added ability to use replacements in User Dialog button labels, like you can
+    in context menus as well
+- Added settings to trigger commands when middle-clicking on user in chat
+  (equivalent to Ctrl+clicking, in the Settings under "Chat")
+
+### Other
+- Select associated message in a few more cases when opening User Dialog
+- Improved support for different `.wav` file formats
+- Updated Gradle to 8.2.1 (and related build changes)
+- Updated Java for the Windows Standalone
+- Updated help
+
+### Bugfixes
+- Fixed channel status warning appearing in Admin Dialog when it shouldn't
+    </pre>
+    
+    <h2>
+        <a name="0.24.1">Version 0.24.1</a> (2023-05-10)
+        <a href="#top" class="top">[back to top]</a>
+    </h2>
+    <pre>
+- Fixed error that can occur when users are added to the Ignored Users list
+    </pre>
+    
+    <h2>
+        <a name="0.24">Version 0.24</a> (2023-05-09)
+        <a href="#top" class="top">[back to top]</a>
+    </h2>
+    <pre>
+### Twitch Features
+- Added some support for suspicious users (for moderators)
+  - Info about monitored/restricted messages it appended to the message
+  - Restricted messages (that aren't posted to regular chat) are shown in chat
+  - Changing monitored/restricted status of a user shown in Modlogs
+  - Some information shown in the User Dialog of involved users
+  - You can match on restricted messages via `config:restricted`, monitored
+    users can not be matched on since that information isn't necessarily
+    available at the time matching happens
+  - There is no API to get/change the monitored/restricted state of users, only
+    the info associated with chat messages
+
+### Emoticons
+- Improved support for Follower Emotes (subscribers can use them globally)
+- Added support for FFZ animated emotes
+- Added setting to toggle using WebP (and WebP is now als used for BTTV and
+  animated FFZ emotes for better quality, if possible)
+- Fallback to PNG/GIF for 7TV if WebP is not enabled or supported
+
+### Other
+- Added command `/msgreplythread` to continue a reply thread
+- Added check whether updating stream status in Admin Dialog actually succeeded
+  (the API does not always return an error when it should)
+- Made search dialog resizable
+- Increased chat input field length limit for non-messages (e.g. when using
+  setting commands with a long value)
+- Improved `$j()` replacement (for `$json()`) to allow more functions to be
+  applied to objects, added `[sort]` and sub parameters for more flexibility
+- Added Stream Highlights cooldown setting
+- Added matching prefixes `config:hide` (to not add to the Highlighted/Ignored
+  Messages panel) and `config:!log` (to not add to the separate log files)
+- Some small UI improvements
+- Updated help
+
+### Bugfixes
+- Fixed bug in Highlight Tester where presets/substitutes were sometimes not set
+- Fixed 7TV emotes with special characters not being shown
+- Fixed favorite emotes not being sorted first unless `:` is used
+    </pre>
+    
+    <h2>
+        <a name="0.23">Version 0.23</a> (2023-02-17)
+        <a href="#top" class="top">[back to top]</a>
+    </h2>
+    <pre>
+### Twitch Features
+- Added support for new stream tags API
+  - Up to 10 tags, max 25 characters, no spaces or special characters
+  - Existing favorited/Status History tags automatically get their spaces
+    removed, however you will need to replace any special characters yourself as
+    you see fit
+- Added `/shoutout` command and display of shoutouts for moderators
+
+### Custom Commands 
+- Changed "Test" dialog output to be less wide with long commands
+- Added some syntax highlighting to some settings
+- Added function `$quote()` for easier quoting (e.g. to write CSV)
+
+### Other
+- Added settings to customize cache, image and exported directories, added
+  launch option to customize debug directory
+- Added a setting (disabled by default) for the Look&Feel error sound (e.g. when
+  backspacing at the start of an input field)
+- Removed session debug log file
+- Added Stream Highlights customization settings for file output
+- Improved Pronouns caching
+- "Open URL" Popup: Added checkbox to disable the popup, apply setting to some
+  more places
+- Updated help
+
+### Bugfixes
+- Fixed Join-link (e.g. for raids) context menu entries
+- Fixed Stream Highlights error when customized chat response message wasn't a
+  valid Custom Command
+    </pre>
+    
+    <h2>
+        <a name="0.22">Version 0.22</a> (2023-01-15)
+        <a href="#top" class="top">[back to top]</a>
+    </h2>
+    <pre>
+### Twitch Features
+- Added chat message for outgoing raids with join link (due to API limits only
+  in at most 10 live channels)
+- Show poll start/end messages (broadcaster only)
+- Added shield mode commands and display (for moderators)
+
+### Custom Commands
+- Added "Anonymous Custom Command" hotkey action, where a Custom Command can be
+  entered directly (instead of a the name of a Custom Command)
+- Added function `$trim()` to remove leading and trailing whitespace
+- Added `trim` option to `$request()`
+- Added function `$json()` to parse JSON and access specific values
+- Changed `$input()` inputbox to have the same features as the channel inputbox
+  if run in a channel context
+- Added `/exportText` options `-A` and `-L`
+
+### Other
+- Added FlatLaf (new modern Look&Feel, selectable in the "Look" settings)
+- Added feature to make a popout with one channel transparent
+- Made AutoMod dialog dockable
+- Improved Settings Dialog
+- Removed SRL menu
+- Removed some hosting related stuff, added raid context menu entries
+- Added setting whether to hide tab pane when only a single channel is open
+  (hidden by default, as was the previous behaviour)
+- Added local caching to Pronouns for more reliability and faster display
+- Added new Chatty icons to img folder
+- Added context menu setting to Live Streams list to only show favorites
+- Updated help
+
+### Bugfixes
+- Fixed `/color` command not being able to set some default colors
+- Fixed error occuring for some commands when no parameter is provided
+- Fixed commands `/unvip` and `/unmod`
+- Fixed channels sometimes not opening in the correct popout
+    </pre>
+    
+    <h2>
+        <a name="0.21">Version 0.21</a> (2022-10-17)
+        <a href="#top" class="top">[back to top]</a>
+    </h2>
+    <p>Twitch has announced that Twitch chat comands will be removed from IRC in
+        February 2023, so they need to be migrated to the API. You will need to
+        update your login with additional access scopes to be able to use most
+        commands in this update.</p>
+    
+    <pre>
+### Twitch Features
+- Switched most Twitch Chat commands to the Twitch API
+  - The commands `/vips`, `/mods` and `/commercial` will continue to function
+    through IRC for non-broadcasters until Twitch removes them
+  - Sending whispers will function through IRC until Twitch removes it, since
+    the API has additional restrictions for whispering
+  - For commands that work through the Twitch API the command result will now be
+    appended to the original message, for example `Trying to ban &lt;name&gt;.. OK`
+- Updated Account dialog to accomodate large number of access scopes better
+
+### Emotes
+- Emote Dialog improvements
+  - Added search field to filter displayed emotes
+  - Made more sections hideable (click on the section header)
+  - Improved Emote sorting and sections
+- Favorite Emotes improvements
+  - Sort first in TAB Completion (can be disabled)
+  - Channel-specific emotes can now also be favorited
+  - Note: Right-click emote for options to favorite/unfavorite
+- Ignored emotes are now also hidden from the Emote Dialog and TAB Completion,
+  while optionally being able to only hide from specific places
+- Prefer per-channel emotes over global emotes (e.g. when a third-party emote
+  provider has an emote with the same name as a global Twitch emote)
+
+### Other
+- Added URL Context Menu entry to open User Dialog for some Twitch URLs
+- Added WebP MacOS support, so 7TV emotes should work on Mac now as well
+- Switched to 7TV v3 API for emotes
+- Added `!if:` prefix (negated `if:`), which allows you to negate restrictions
+  that would otherwise not be possible
+- Automatically reconnect IRC when a new valid token is set
+- Improved connecting to chat responsiveness and info messages
+- Removed deprecated Sounds setting page
+- Updated translations
+- Updated help
+
+### Bugfixes
+- Fixed error related to emote pausing
+- Fixed popout URL parsing
+- Fixed offline streams sometimes appearing as live when joining channel
+- Updated JNA to fix some issues
+- Fixed FFZ custom mod badge that was broken in some channels
     </pre>
     
     <h2>

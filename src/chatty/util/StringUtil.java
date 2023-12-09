@@ -56,6 +56,10 @@ public class StringUtil {
         return join(Arrays.asList(array), ",");
     }
     
+    public static String join(Object[] array, String delimiter) {
+        return join(Arrays.asList(array), delimiter);
+    }
+    
     public static String join(Collection<?> items, String delimiter) {
         return join(items, delimiter, -1, -1);
     }
@@ -232,6 +236,9 @@ public class StringUtil {
      * @return 
      */
     public static String removeWhitespace(String input) {
+        if (input == null) {
+            return null;
+        }
         StringBuilder b = new StringBuilder();
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
@@ -535,6 +542,17 @@ public class StringUtil {
     
     public static String[] splitLines(String input) {
         return input.split("\r\n|\n|\r");
+    }
+    
+    public static String quote(String input) {
+        return quote(input, "\"");
+    }
+    
+    public static String quote(String input, String quote) {
+        if (input == null) {
+            return null;
+        }
+        return quote+input.replaceAll(Pattern.quote(quote), quote+quote)+quote;
     }
     
     public static final NullComparator NULL_COMPARATOR = new NullComparator();

@@ -9,6 +9,7 @@ import chatty.gui.NamedColor;
 import chatty.gui.components.textpane.ModLogInfo;
 import chatty.util.Debugging;
 import chatty.util.StringUtil;
+import chatty.util.api.pubsub.LowTrustUserMessageData;
 import chatty.util.api.pubsub.ModeratorActionData;
 import chatty.util.irc.IrcBadges;
 import chatty.util.irc.MsgTags;
@@ -201,10 +202,10 @@ public class User implements Comparable<User> {
         return twitchBadges != null && twitchBadges.hasIdVersion(id, version);
     }
     
-    public List<Usericon> getBadges(boolean botBadgeEnabled, MsgTags tags, User localUser, boolean channelLogo) {
+    public List<Usericon> getBadges(boolean botBadgeEnabled, MsgTags tags, User localUser, int channelLogoSize) {
         IrcBadges badges = getTwitchBadges();
         if (userSettings.iconManager != null) {
-            return userSettings.iconManager.getBadges(badges, this, localUser, botBadgeEnabled, tags, channelLogo);
+            return userSettings.iconManager.getBadges(badges, this, localUser, botBadgeEnabled, tags, channelLogoSize);
         }
         return null;
     }
@@ -338,7 +339,8 @@ public class User implements Comparable<User> {
      */
     public synchronized void addMessage(String line, boolean action, String id) {
         setFirstSeen();
-        addLine(new TextMessage(System.currentTimeMillis(), line, action, id));
+        addLine(new TextMessage(System.currentTimeMillis(), line, action, id, null));
+        replayCachedLowTrust();
         numberOfMessages++;
     }
     
@@ -363,9 +365,9 @@ public class User implements Comparable<User> {
         replayCachedBanInfo();
     }
     
-    public synchronized void addSub(String message, String text) {
+    public synchronized void addSub(String message, String text, String id) {
         setFirstSeen();
-        addLine(new SubMessage(System.currentTimeMillis(), message, text));
+        addLine(new SubMessage(System.currentTimeMillis(), message, text, id));
     }
     
     public synchronized void addInfo(String message, String fullText) {
@@ -456,6 +458,64 @@ public class User implements Comparable<User> {
         return false;
     }
     
+    private List<LowTrustUserMessageData> cachedLowTrust;
+    
+    /**
+     * Add ban info (by/reason) for this user. Must be for this user.
+     * 
+     * @param data 
+     */
+    public synchronized void addLowTrust(LowTrustUserMessageData data) {
+        if (!addLowTrustNow(data)) {
+            // Adding failed, cache and wait to see if it works later
+            if (cachedLowTrust == null) {
+                cachedLowTrust = new ArrayList<>();
+            }
+            cachedLowTrust.add(data);
+        }
+    }
+    
+    private synchronized void replayCachedLowTrust() {
+        if (cachedLowTrust == null) {
+            return;
+        }
+        Iterator<LowTrustUserMessageData> it = cachedLowTrust.iterator();
+        while (it.hasNext()) {
+            LowTrustUserMessageData data = it.next();
+            if (System.currentTimeMillis() - data.created_at > BAN_INFO_WAIT) {
+                it.remove();
+            } else {
+                if (addLowTrustNow(data)) {
+                    it.remove();
+                }
+            }
+        }
+        if (cachedLowTrust.isEmpty()) {
+            cachedLowTrust = null;
+        }
+    }
+    
+    private synchronized boolean addLowTrustNow(LowTrustUserMessageData data) {
+        if (lines == null) {
+            return false;
+        }
+        for (int i = lines.size() - 1; i >= 0; i--) {
+            Message m = lines.get(i);
+            // Too old, abort (associated message might not be here yet)
+            if (System.currentTimeMillis() - m.getTime() > BAN_INFO_WAIT) {
+                return false;
+            }
+            if (m instanceof TextMessage) {
+                TextMessage tm = (TextMessage) m;
+                if (tm.id != null && tm.id.equals(data.aboutMessageId)) {
+                    lines.set(i, tm.addLowTrust(data));
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
     public synchronized void addAutoModMessage(String line, String id, String reason) {
         addLine(new AutoModMessage(line, id, reason));
     }
@@ -532,9 +592,34 @@ public class User implements Comparable<User> {
         return null;
     }
     
+    public synchronized SubMessage getSubMessage(String msgId) {
+        if (msgId == null) {
+            return null;
+        }
+        if (lines == null) {
+            return null;
+        }
+        for (Message msg : lines) {
+            if (msg instanceof SubMessage) {
+                SubMessage textMsg = (SubMessage)msg;
+                if (msgId.equals(textMsg.id)) {
+                    return textMsg;
+                }
+            }
+        }
+        return null;
+    }
+    
     public String getMessageText(String msgId) {
         TextMessage msg = getMessage(msgId);
-        return msg != null ? msg.text : null;
+        if (msg != null) {
+            return msg.text;
+        }
+        SubMessage subMsg = getSubMessage(msgId);
+        if (subMsg != null) {
+            return subMsg.attached_message;
+        }
+        return null;
     }
     
     public synchronized AutoModMessage getAutoModMessage(String msgId) {
@@ -1121,12 +1206,14 @@ public class User implements Comparable<User> {
         public final String text;
         public final boolean action;
         public final String id;
+        public final LowTrustUserMessageData lowTrust;
         
-        public TextMessage(long time, String message, boolean action, String id) {
+        public TextMessage(long time, String message, boolean action, String id, LowTrustUserMessageData lowTrust) {
             super(time);
             this.text = message;
             this.action = action;
             this.id = id;
+            this.lowTrust = lowTrust;
         }
         
         public String getText() {
@@ -1136,6 +1223,11 @@ public class User implements Comparable<User> {
         public boolean isAction() {
             return action;
         }
+        
+        public TextMessage addLowTrust(LowTrustUserMessageData data) {
+            return new TextMessage(getTime(), text, action, id, data);
+        }
+        
     }
     
     public static class BanMessage extends Message {
@@ -1211,11 +1303,13 @@ public class User implements Comparable<User> {
         
         public final String attached_message;
         public final String system_msg;
+        public final String id;
         
-        public SubMessage(long time, String message, String text) {
+        public SubMessage(long time, String message, String text, String id) {
             super(time);
             this.attached_message = message;
             this.system_msg = text;
+            this.id = id;
         }
     }
     

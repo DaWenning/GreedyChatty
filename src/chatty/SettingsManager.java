@@ -1,6 +1,7 @@
 
 package chatty;
 
+import chatty.Chatty.PathType;
 import chatty.gui.components.updating.Version;
 import chatty.util.colors.HtmlColors;
 import chatty.gui.WindowStateManager;
@@ -18,8 +19,6 @@ import chatty.util.settings.Settings;
 import java.awt.Color;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.logging.Logger;
 import org.json.simple.JSONArray;
@@ -66,8 +65,8 @@ public class SettingsManager {
     
     public SettingsManager() {
         fileManager = new FileManager(
-                Paths.get(Chatty.getUserDataDirectory()),
-                Paths.get(Chatty.getBackupDirectory()));
+                Chatty.getPathCreate(PathType.SETTINGS),
+                Chatty.getPathCreate(PathType.BACKUP));
         FileManager.FileContentInfoProvider fileInfoProvider = new FileManager.FileContentInfoProvider() {
 
             @Override
@@ -131,7 +130,7 @@ public class SettingsManager {
 
         // Hotkeys
         addDefaultHotkeyAppWide("0.7.3", "dialog.streams", "ctrl L");
-        addDefaultHotkey("0.7.3", "dialog.toggleEmotes", "ctrl E");
+        addDefaultHotkeyAppWide("0.7.3", "dialog.toggleEmotes", "ctrl E");
         addDefaultHotkey("0.7.3", "dialog.search", "ctrl F");
         addDefaultHotkey("0.7.3", "dialog.joinChannel", "ctrl J");
         addDefaultHotkeyAppWide("0.7.3", "window.toggleUserlist", "F9");
@@ -144,10 +143,15 @@ public class SettingsManager {
         addDefaultHotkey("0.7.3", "selection.toggle", "ctrl SPACE");
         addDefaultHotkey("0.7.3", "selection.toggle", "ctrl S");
         addDefaultHotkeyAppWide("0.9b1", "about", "F1");
+        addDefaultHotkeyAppWide("0.26-b3", "scroll.pageUp", "PAGE_UP");
+        addDefaultHotkeyAppWide("0.26-b3", "scroll.pageDown", "PAGE_DOWN");
         settings.addList("hotkeys", getDefaultHotkeySettingValue(), Setting.LIST);
         settings.addBoolean("globalHotkeysEnabled", true);
         settings.addBoolean("inputHistoryMultirowRequireCtrl", true);
         
+        settings.addString("cachePath", "");
+        settings.addString("imgPath", "");
+        settings.addString("exportPath", "");
 
         //===========
         // Connecting
@@ -206,9 +210,17 @@ public class SettingsManager {
         settings.addString("lafStyle", "regular");
         settings.addString("lafScroll", "default");
         settings.addBoolean("lafNativeWindow", true);
+        settings.addBoolean("lafFlatStyledWindow", true);
+        settings.addBoolean("lafFlatEmbeddedMenu", false);
+        settings.addString("lafFlatProperties", "");
+        settings.addLong("lafFlatTabs", 3);
+        settings.addBoolean("lafErrorSound", false);
         settings.addString("language", "");
         settings.addString("locale", "");
         settings.addString("timezone", "");
+        
+        settings.addBoolean("macScreenMenuBar", true);
+        settings.addBoolean("macSystemAppearance", true);
         
         settings.addLong("dialogFontSize", -1);
 
@@ -218,7 +230,7 @@ public class SettingsManager {
         settings.addBoolean("timestampFontEnabled", false);
         settings.addString("timestampFont", "Dialog 12");
         settings.addString("inputFont", "Dialog 14");
-        settings.addString("userlistFont", "Dialog Bold 12");
+        settings.addString("userlistFont", "Dialog 12");
         settings.addLong("lineSpacing", 2);
         settings.addLong("paragraphSpacing", 8);
         settings.addLong("bottomMargin", -1);
@@ -250,7 +262,6 @@ public class SettingsManager {
         settings.addBoolean("ffzModIcon", true);
         settings.addBoolean("bttvEmotes", true);
         settings.addBoolean("seventv", true);
-        settings.addBoolean("showAnimatedEmotes", true);
         settings.addBoolean("animatedEmotes", true);
         settings.addLong("animationPause", 2);
         settings.addLong("animationPauseFrame", 2);
@@ -259,6 +270,7 @@ public class SettingsManager {
         settings.addList("favoriteEmotes", new ArrayList(), Setting.LIST);
         settings.addLong("smilies", 10);
         settings.addList("localEmotes", new ArrayList(), Setting.LIST);
+        settings.addBoolean("webp", true);
         
         settings.addString("emoji", "twemoji");
         settings.addBoolean("emojiReplace", true);
@@ -316,6 +328,11 @@ public class SettingsManager {
         // Usercolors
         settings.addBoolean("customUsercolors", false);
         settings.addList("usercolors", new LinkedList(), Setting.STRING);
+        
+        // Transparency
+        settings.addLong("transparencyBackground", 50);
+        settings.addBoolean("transparencyClickThrough", true);
+        settings.addString("transparencyCurrentId", "");
 
         //====================
         // Other Customization
@@ -358,6 +375,7 @@ public class SettingsManager {
                 "Translate=/openUrlPrompt https://translate.google.com/#view=home&op=translate&sl=auto&tl=en&text=$$urlencode($(msg))");
         settings.addString("adminContextMenu", "!title=!title $(title)\n!game=!game $(game)");
         settings.addBoolean("menuCommandLabels", false);
+        settings.addBoolean("menuRestrictions", false);
         
         settings.addBoolean("closeUserDialogOnAction", true);
         settings.addBoolean("openUserDialogByMouse", true);
@@ -479,6 +497,7 @@ public class SettingsManager {
         settings.addBoolean("tabsCloseSwitchToPrev", true);
         settings.addString("tabsPlacement", "top");
         settings.addString("tabsLayout", "wrap");
+        settings.addBoolean("tabsHideIfSingle", true);
         settings.addLong("tabsLive", 16);
         settings.addLong("tabsMessage", 4);
         settings.addLong("tabsHighlight", 8);
@@ -505,6 +524,7 @@ public class SettingsManager {
         settings.addString("liveStreamsCommand", "");
         settings.addBoolean("liveStreamsChatIcon", true);
         settings.addBoolean("liveStreamsNotificationAction", false);
+        settings.addBoolean("liveStreamsFavsOnly", false);
         settings.addLong("historyRange", 0);
         settings.addBoolean("historyVerticalZoom", false);
         
@@ -556,6 +576,8 @@ public class SettingsManager {
         settings.addLong("nActivityTime", 10);
         settings.addString("nCommand", "");
         settings.addBoolean("nHideOnStart", false);
+        settings.addBoolean("nInfoMsgEnabled", false);
+        settings.addString("nInfoMsgTarget", "Notifications");
 
         settings.addList("notifications", getDefaultNotificationSettingValue(), Setting.LIST);
         settings.addList("nColorPresets", new ArrayList<>(), Setting.LIST);
@@ -576,6 +598,8 @@ public class SettingsManager {
         settings.addBoolean("pauseChatOnMouseMove", false);
         settings.addBoolean("pauseChatOnMouseMoveCtrlRequired", false);
         settings.addString("commandOnCtrlClick", "");
+        settings.addString("commandOnMiddleClick", "");
+        settings.addString("commandOnCtrlMiddleClick", "");
 
         // Not really used anymore, kept for compatability
         settings.addBoolean("ignoreJoinsParts",false);
@@ -604,6 +628,10 @@ public class SettingsManager {
 
         // Message filtering
         settings.addLong("filterCombiningCharacters", Helper.FILTER_COMBINING_CHARACTERS_LENIENT);
+        
+        // Low-trust/restricted messages
+        settings.addBoolean("showLowTrustInfo", false);
+        settings.addBoolean("showRestrictedMessages", false);
 
 
         //==============
@@ -640,6 +668,11 @@ public class SettingsManager {
         settings.addList("filter", new ArrayList(), Setting.STRING);
         settings.addBoolean("filterEnabled", true);
         settings.addBoolean("filterOwnText", true);
+        
+        // Routing
+        settings.addList("routingTargets", new ArrayList(), Setting.LIST);
+        settings.addList("routing", new ArrayList(), Setting.STRING);
+        settings.addBoolean("routingMulti", true);
         
         // Matching
         List<String> matchingPresetsDefault = new ArrayList<>();
@@ -724,6 +757,7 @@ public class SettingsManager {
         settings.addString("groupChatPort", "");
         settings.addBoolean("whisperAutoRespond", false);
         settings.addString("whisperAutoRespondCustom", "");
+        settings.addBoolean("whisperApi", false);
         
         // Copy Messages
         settings.addBoolean("cmEnabled", false);
@@ -753,14 +787,14 @@ public class SettingsManager {
         settings.addBoolean("streamHighlightChannelRespond", false);
         settings.addString("streamHighlightResponseMsg", "Added stream $(added) for $(chan) [$(uptime)] $(comment)");
         settings.addBoolean("streamHighlightMarker", true);
+        settings.addBoolean("streamHighlightCustomEnabled", false);
+        settings.addString("streamHighlightCustom", "$(timestamp),$(chan),$(uptime),$(streamgame),$(chatuser),$quote($(rawcomment))");
+        settings.addBoolean("streamHighlightExtra", true);
+        settings.addLong("streamHighlightCooldown", 0);
 
         // Stream Status Writer
         settings.addBoolean("enableStatusWriter", false);
         settings.addString("statusWriter", "");
-
-        // Auto-Unhost
-        settings.addBoolean("autoUnhost", false);
-        settings.addList("autoUnhostStreams", new ArrayList(), Setting.STRING);
         
         settings.addMap("rewards", new HashMap(), Setting.STRING);
         
@@ -997,6 +1031,9 @@ public class SettingsManager {
                 settings.setString(setting, settings.getString(setting).replace("Y", "y"));
             }
         }
+        if (switchedFromVersionBefore("0.21-b3")) {
+            settings.setBoolean("ffzEvent", false);
+        }
         
         overrideHotkeySettings();
     }
@@ -1024,9 +1061,10 @@ public class SettingsManager {
     }
     
     public void debugSettings() {
-        if (Chatty.getInvalidSettingsDirectory() != null) {
-            LOGGER.warning("Invalid -d dir: "+Chatty.getInvalidSettingsDirectory());
-        }
+//        String invalidPath = Chatty.getInvalidCustomPath(PathType.SETTINGS);
+//        if (invalidPath != null) {
+//            LOGGER.warning("Invalid -d dir: "+invalidPath);
+//        }
 //        StringBuilder result = new StringBuilder("Settings: ");
 //        boolean first = true;
 //        for (String setting : debugSettings) {
@@ -1043,8 +1081,7 @@ public class SettingsManager {
     }
     
     public boolean checkSettingsDir() {
-        Path path = Paths.get(Chatty.getUserDataDirectory());
-        return Files.isDirectory(path);
+        return Files.isDirectory(Chatty.getPath(PathType.SETTINGS));
     }
     
     private void addDefaultHotkey(String version, String id, String hotkey) {

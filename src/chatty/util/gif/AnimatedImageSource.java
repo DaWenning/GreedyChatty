@@ -76,6 +76,10 @@ public class AnimatedImageSource implements ImageProducer {
         // Empty
     }
     
+    public AnimatedImage getAnimatedImage() {
+        return image;
+    }
+    
     //==========================
     // Frame updates
     //==========================
@@ -105,6 +109,11 @@ public class AnimatedImageSource implements ImageProducer {
                             case 2:
                                 pauseFrame = image.getPreferredPauseFrame();
                                 break;
+                        }
+                        
+                        // If it hadn't played yet could be -1 from currentFrame
+                        if (pauseFrame < 0) {
+                            pauseFrame = 0;
                         }
                         
                         if (pauseFrame != currentFrame || !hasPixels()) {

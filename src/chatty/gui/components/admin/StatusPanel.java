@@ -15,39 +15,39 @@ import chatty.gui.components.menus.TextSelectionMenu;
 import chatty.lang.Language;
 import chatty.util.DateTime;
 import chatty.util.StringUtil;
-import chatty.util.api.ChannelInfo;
 import chatty.util.api.ChannelStatus;
+import chatty.util.api.ChannelStatus.StreamTag;
 import chatty.util.api.ResultManager;
 import chatty.util.api.StreamCategory;
-import chatty.util.api.StreamTagManager;
-import chatty.util.api.StreamTagManager.StreamTag;
+import chatty.util.api.StreamLabels;
+import chatty.util.api.StreamLabels.StreamLabel;
 import chatty.util.api.TwitchApi;
-import chatty.util.commands.CustomCommand;
 import chatty.util.commands.Parameters;
+import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import javax.swing.BorderFactory;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
-import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -56,7 +56,7 @@ import javax.swing.event.DocumentListener;
  *
  * @author tduva
  */
-public class StatusPanel extends JPanel {
+public class StatusPanel extends JPanel implements Scrollable {
     
     /**
      * Set to not updating the channel info after this time (re-enable buttons).
@@ -69,6 +69,7 @@ public class StatusPanel extends JPanel {
     private final JTextArea status = new JTextArea();
     private final JTextField game = new JTextField(20);
     private final JTextArea streamTags = new JTextArea();
+    private final JTextArea streamLabels = new JTextArea();
     private final JButton update = new JButton(Language.getString("admin.button.update"));
     private final JLabel updated = new JLabel("No info loaded");
     private final JLabel putResult = new JLabel("...");
@@ -76,6 +77,8 @@ public class StatusPanel extends JPanel {
     private final JButton removeGame = new JButton(Language.getString("admin.button.removeGame"));
     private final JButton selectTags = new JButton(Language.getString("admin.button.selectTags"));
     private final JButton removeTags = new JButton(Language.getString("admin.button.removeTags"));
+    private final JButton selectLabels = new JButton(Language.getString("admin.button.selectLabels"));
+    private final JButton removeLabels = new JButton(Language.getString("admin.button.removeLabels"));
     private final JButton reloadButton = new JButton(Language.getString("admin.button.reload"));
     private final JButton historyButton = new JButton(Language.getString("admin.button.presets"));
     private final JButton addToHistoryButton = new JButton(Language.getString("admin.button.fav"));
@@ -90,6 +93,7 @@ public class StatusPanel extends JPanel {
     private String currentChannel;
     private boolean statusEdited;
     private final List<StreamTag> currentStreamTags = new ArrayList<>();
+    private final List<StreamLabel> currentStreamLabels = new ArrayList<>();
     private StreamCategory currentStreamCategory = StreamCategory.EMPTY;
     private long infoLastLoaded;
     
@@ -97,12 +101,11 @@ public class StatusPanel extends JPanel {
     
     private boolean loading;
     private boolean loadingStatus;
-    private boolean loadingTags;
     private String statusLoadError;
-    private String tagsLoadError;
     private String statusPutResult;
-    private String tagsPutResult;
     private long lastPutResult = -1;
+    private ChannelStatus channelStatusToCheck;
+    private boolean updateStatusAfterLoad = false;
     
     public StatusPanel(AdminDialog parent, MainGui main, TwitchApi api) {
         
@@ -161,8 +164,9 @@ public class StatusPanel extends JPanel {
         
         status.setLineWrap(true);
         status.setWrapStyleWord(true);
-        status.setRows(2);
-        status.setMargin(new Insets(2,3,3,2));
+        status.setBorder(BorderFactory.createCompoundBorder(
+                game.getBorder(), 
+                BorderFactory.createEmptyBorder(2, 3, 3, 2)));
         status.getDocument().addDocumentListener(new DocumentListener() {
 
             @Override
@@ -184,10 +188,8 @@ public class StatusPanel extends JPanel {
         status.getAccessibleContext().setAccessibleName(Language.getString("admin.input.title"));
         GuiUtil.installLengthLimitDocumentFilter(status, 500, false);
         gbc = makeGbc(0,2,3,1);
-        gbc.fill = GridBagConstraints.BOTH;
-        gbc.weightx = 1;
-        gbc.weighty = 1;
-        add(new JScrollPane(status), gbc);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        add(status, gbc);
         
         game.getAccessibleContext().setAccessibleName(Language.getString("admin.input.game"));
         game.setEditable(false);
@@ -231,13 +233,36 @@ public class StatusPanel extends JPanel {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         add(removeTags, gbc);
         
-        gbc = makeGbc(0,5,3,1);
+        streamLabels.getAccessibleContext().setAccessibleName(Language.getString("admin.input.labels"));
+        streamLabels.setEditable(false);
+        streamLabels.setBackground(game.getBackground());
+        streamLabels.setBorder(game.getBorder());
+        streamLabels.setLineWrap(true);
+        streamLabels.setWrapStyleWord(true);
+        gbc = makeGbc(0,5,1,1);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        add(streamLabels, gbc);
+        
+        selectLabels.setMargin(SMALL_BUTTON_INSETS);
+        gbc = makeGbc(1,5,1,1);
+        gbc.anchor = GridBagConstraints.NORTH;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        add(selectLabels, gbc);
+        
+        removeLabels.setMargin(SMALL_BUTTON_INSETS);
+        removeLabels.getAccessibleContext().setAccessibleName(Language.getString("admin.button.removeLabels2"));
+        gbc = makeGbc(2,5,1,1);
+        gbc.anchor = GridBagConstraints.NORTH;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        add(removeLabels, gbc);
+        
+        gbc = makeGbc(0,6,3,1);
         gbc.fill = GridBagConstraints.HORIZONTAL;
         update.setMnemonic(KeyEvent.VK_U);
         update.setToolTipText(Language.getString("admin.button.update.tip"));
         add(update, gbc);
         
-        gbc = makeGbc(0,6,3,1);
+        gbc = makeGbc(0,7,3,1);
         add(putResult,gbc);
         
         ActionListener actionListener = new ActionListener() {
@@ -247,10 +272,15 @@ public class StatusPanel extends JPanel {
                 if (e.getSource() == update) {
                     if (currentChannel != null && !currentChannel.isEmpty()) {
                         loadingStatus = true;
-                        loadingTags = true;
                         setLoading(true);
-                        main.putChannelInfo(ChannelStatus.createPut(currentChannel, status.getText(), currentStreamCategory));
-                        putTags();
+                        ChannelStatus putStatus = ChannelStatus.createPut(
+                                currentChannel,
+                                status.getText(),
+                                currentStreamCategory,
+                                currentStreamTags,
+                                currentStreamLabels);
+                        channelStatusToCheck = putStatus;
+                        main.putChannelInfo(putStatus);
                         addCurrentToHistory();
                     }
                 } else if (e.getSource() == reloadButton) {
@@ -269,7 +299,7 @@ public class StatusPanel extends JPanel {
                     statusEdited();
                 } else if (e.getSource() == selectTags) {
                     selectTagsDialog.setLocationRelativeTo(StatusPanel.this);
-                    List<StreamTagManager.StreamTag> result = selectTagsDialog.open(currentStreamTags);
+                    List<StreamTag> result = selectTagsDialog.open(currentStreamTags);
                     if (result != null) {
                         setTags(result);
                         statusEdited();
@@ -277,6 +307,16 @@ public class StatusPanel extends JPanel {
                 } else if (e.getSource() == removeTags) {
                     setTags(null);
                     statusEdited();
+                } else if (e.getSource() == selectLabels) {
+                    SelectLabelsDialog dialog = new SelectLabelsDialog(main);
+                    dialog.setLocationRelativeTo(StatusPanel.this);
+                    List<StreamLabel> result = dialog.open(currentStreamLabels);
+                    if (result != null) {
+                        setLabels(result);
+                        statusEdited();
+                    }
+                } else if (e.getSource() == removeLabels) {
+                    setLabels(StreamLabels.copyAutoLabelsOnly(currentStreamLabels));
                 } else if (e.getSource() == historyButton) {
                     statusHistoryDialog.setLocationRelativeTo(StatusPanel.this);
                     StatusHistoryEntry result = statusHistoryDialog.showDialog(currentStreamCategory);
@@ -293,6 +333,9 @@ public class StatusPanel extends JPanel {
                         if (result.tags != null) {
                             setTags(result.tags);
                         }
+                        if (result.labels != null) {
+                            setLabels(result.labels);
+                        }
                     }
                 } else if (e.getSource() == addToHistoryButton) {
                     addCurrentToFavorites();
@@ -305,6 +348,8 @@ public class StatusPanel extends JPanel {
         removeGame.addActionListener(actionListener);
         selectTags.addActionListener(actionListener);
         removeTags.addActionListener(actionListener);
+        selectLabels.addActionListener(actionListener);
+        removeLabels.addActionListener(actionListener);
         historyButton.addActionListener(actionListener);
         addToHistoryButton.addActionListener(actionListener);
         update.addActionListener(actionListener);
@@ -354,6 +399,17 @@ public class StatusPanel extends JPanel {
             
             private void openContextMenu(MouseEvent e) {
                 if (e.isPopupTrigger()) {
+                    Parameters params = Parameters.create("");
+                    params.put("title", status.getText());
+                    params.put("game", game.getText());
+                    params.put("tag-ids", StringUtil.join(currentStreamTags, ",", o -> {
+                        return ((StreamTag) o).getName();
+                    }));
+                    params.put("tag-names", StringUtil.join(currentStreamTags, ",", o -> {
+                        return ((StreamTag) o).getDisplayName();
+                    }));
+                    Room room = Room.createRegular(Helper.toChannel(currentChannel));
+                    
                     ContextMenu m = new ContextMenu() {
 
                         @Override
@@ -361,23 +417,14 @@ public class StatusPanel extends JPanel {
                             if (e instanceof CommandActionEvent) {
                                 // Command Context Menu
                                 CommandActionEvent c = (CommandActionEvent)e;
-                                Parameters params = Parameters.create("");
-                                params.put("title", status.getText());
-                                params.put("game", game.getText());
-                                params.put("tag-ids", StringUtil.join(currentStreamTags, ",", o -> {
-                                    return ((StreamTag) o).getId();
-                                }));
-                                params.put("tag-names", StringUtil.join(currentStreamTags, ",", o -> {
-                                    return ((StreamTag) o).getDisplayName();
-                                }));
-                                main.anonCustomCommand(Room.createRegular(Helper.toChannel(currentChannel)), c.getCommand(), params);
+                                main.anonCustomCommand(room, c.getCommand(), params);
                                 addCurrentToHistory();
                             }
                             // Dock item
                             parent.helper.menuAction(e);
                         }
                     };
-                    CommandMenuItems.addCommands(CommandMenuItems.MenuType.ADMIN, m);
+                    CommandMenuItems.addCommands(CommandMenuItems.MenuType.ADMIN, m, params);
                     m.addSeparator();
                     parent.helper.addToContextMenu(m);
                     m.show(e.getComponent(), e.getPoint().x, e.getPoint().y);
@@ -401,6 +448,7 @@ public class StatusPanel extends JPanel {
             status.setText("");
             game.setText("");
             setTags(null);
+            setLabels(null);
 
             // This will reset last loaded anyway
             getChannelInfo();
@@ -414,7 +462,7 @@ public class StatusPanel extends JPanel {
             streamTags.setText(null);
         } else {
             for (StreamTag t : tags) {
-                if (t.canUserSet()) {
+                if (t != null && t.isValid()) {
                     currentStreamTags.add(t);
                 }
             }
@@ -422,29 +470,57 @@ public class StatusPanel extends JPanel {
         }
     }
     
-    private void putTags() {
-        final String channel = currentChannel;
-        api.setStreamTags(currentChannel, currentStreamTags, error -> {
-            SwingUtilities.invokeLater(() -> {
-                if (currentChannel.equals(channel)) {
-                    if (error != null) {
-                        tagsPutResult = "Failed setting tags. (" + error + ")";
-                    } else {
-                        tagsPutResult = "Tags updated.";
-                    }
-                    loadingTags = false;
-                    checkLoadingDone();
+    private void setLabels(Collection<StreamLabel> labels) {
+        currentStreamLabels.clear();
+        if (labels == null) {
+            streamLabels.setText(null);
+        } else {
+            currentStreamLabels.addAll(labels);
+            StringBuilder b = new StringBuilder();
+            for (StreamLabel label : labels) {
+                if (b.length() != 0) {
+                    b.append(", ");
                 }
-            });
-        });
+                b.append(label.getId());
+                if (!label.isEditable()) {
+                    b.append(" (auto)");
+                }
+            }
+            streamLabels.setText(b.toString());
+        }
     }
     
     public void channelStatusReceived(ChannelStatus channelStatus, TwitchApi.RequestResultCode result) {
         if (channelStatus.channelLogin.equals(currentChannel)) {
+            if (channelStatusToCheck != null
+                    && channelStatusToCheck.channelLogin.equals(currentChannel)) {
+                String difference = channelStatusToCheck.getStatusDifference(channelStatus);
+                if (!difference.isEmpty()) {
+                    JOptionPane.showMessageDialog(this,
+                            String.format("Stream Status may not have been updated, "
+                                    + "possibly due to an invalid title (e.g. swear words) or tags (setting no tags at all may not work). "
+                                    + "You can use the reload button to load the current Status, overwriting what you changed.\n\n"
+                                    + "Not updated: %s\n\n"
+                                    + "[Current Status]\n"
+                                    + "Title: '%s'\n"
+                                    + "Category: '%s'\n"
+                                    + "Tags: %s\n"
+                                    + "Labels: %s", difference, channelStatus.title, channelStatus.category, channelStatus.tags, channelStatus.labels),
+                            "Update failed", JOptionPane.WARNING_MESSAGE);
+                }
+                else {
+                    setLabels(channelStatus.labels);
+                }
+            }
+            channelStatusToCheck = null;
             if (result == TwitchApi.RequestResultCode.SUCCESS) {
-                status.setText(channelStatus.title);
-                currentStreamCategory = channelStatus.category;
-                game.setText(channelStatus.category.name);
+                if (updateStatusAfterLoad) {
+                    status.setText(channelStatus.title);
+                    currentStreamCategory = channelStatus.category;
+                    game.setText(channelStatus.category.name);
+                    setTags(channelStatus.tags);
+                    setLabels(channelStatus.labels);
+                }
             }
             else {
                 infoLastLoaded = -1;
@@ -454,6 +530,7 @@ public class StatusPanel extends JPanel {
                     statusLoadError = "";
                 }
             }
+            updateStatusAfterLoad = false;
             loadingStatus = false;
             checkLoadingDone();
         }
@@ -466,9 +543,10 @@ public class StatusPanel extends JPanel {
      * 
      * @param result 
      */
-    public void setPutResult(TwitchApi.RequestResultCode result) {
+    public void setPutResult(TwitchApi.RequestResultCode result, String error) {
         if (result == TwitchApi.RequestResultCode.SUCCESS) {
             statusPutResult = Language.getString("admin.infoUpdated");
+            checkChannelStatus();
         } else {
             if (result == TwitchApi.RequestResultCode.ACCESS_DENIED) {
                 statusPutResult = "Update: Access denied/Failed";
@@ -478,8 +556,12 @@ public class StatusPanel extends JPanel {
                 }
                 updated.setText("Error: Access denied");
             } else if (result == TwitchApi.RequestResultCode.FAILED) {
-                statusPutResult = "Update: Unknown error";
-                updated.setText("Error: Unknown error");
+                String errorText = "Error: Unknown error";
+                if (!StringUtil.isNullOrEmpty(error)) {
+                    errorText = "Error: "+error;
+                }
+                statusPutResult = errorText;
+                updated.setText(errorText);
             } else if (result == TwitchApi.RequestResultCode.NOT_FOUND) {
                 statusPutResult = "Update: Channel not found.";
                 updated.setText("Error: Channel not found.");
@@ -487,6 +569,8 @@ public class StatusPanel extends JPanel {
                 statusPutResult = "Update: Invalid title/game (possibly bad language)";
                 updated.setText("Error: Invalid title/game");
             }
+            // If error it's not updated anyway, so no need to check
+            channelStatusToCheck = null;
         }
         lastPutResult = System.currentTimeMillis();
         loadingStatus = false;
@@ -511,53 +595,35 @@ public class StatusPanel extends JPanel {
      */
     private void getChannelInfo() {
         loadingStatus = true;
-        loadingTags = true;
         statusLoadError = null;
-        tagsLoadError = null;
+        updateStatusAfterLoad = true;
         
         setLoading(true);
         api.getChannelStatus(currentChannel);
-        final String channel = currentChannel;
-        api.getTagsByStream(currentChannel, (tags, e) -> {
-            SwingUtilities.invokeLater(() -> {
-                // Tags may contain automatically set tags as well
-                if (currentChannel.equals(channel)) {
-                    if (tags == null) {
-                        tagsLoadError = e == null ? "" : e;
-                    } else {
-                        setTags(tags);
-                    }
-                    loadingTags = false;
-                    checkLoadingDone();
-                }
-                if (tags != null) {
-                    for (StreamTag c : tags) {
-                        updateStreamTagName(c);
-                    }
-                }
-            });
-        });
+    }
+    
+    private void checkChannelStatus() {
+        if (channelStatusToCheck != null) {
+            api.getChannelStatus(currentChannel);
+        }
     }
     
     private void checkLoadingDone() {
-        if (!loadingStatus && !loadingTags) {
+        if (!loadingStatus) {
             statusEdited = false;
             updated.setText(Language.getString("admin.infoLoaded.now"));
-            if (statusPutResult != null || tagsPutResult != null) {
-                setPutResult(statusPutResult+" / "+tagsPutResult);
+            if (statusPutResult != null) {
+                setPutResult(statusPutResult);
                 statusPutResult = null;
-                tagsPutResult = null;
             }
-            if (statusLoadError != null || tagsLoadError != null) {
+            if (statusLoadError != null) {
                 infoLastLoaded = -1;
                 String error = getError(statusLoadError);
-                error = StringUtil.append(error, ", ", getError(tagsLoadError));
                 if (error.isEmpty()) {
                     error = "Unkonwn Error";
                 }
                 updated.setText("Loading failed: "+error);
                 statusLoadError = null;
-                tagsLoadError = null;
             } else {
                 infoLastLoaded = System.currentTimeMillis();
             }
@@ -589,6 +655,8 @@ public class StatusPanel extends JPanel {
         removeGame.setEnabled(!loading);
         selectTags.setEnabled(!loading);
         removeTags.setEnabled(!loading);
+        selectLabels.setEnabled(!loading);
+        removeLabels.setEnabled(!loading);
         reloadButton.setEnabled(!loading);
         historyButton.setEnabled(!loading);
         addToHistoryButton.setEnabled(!loading);
@@ -612,26 +680,6 @@ public class StatusPanel extends JPanel {
         }
     }
     
-    /**
-     * This should be done from an up-to-date source, like a direct response
-     * from the API. It might not be necessary, but just in case a Tag gets
-     * renamed at some point, at least this way it's possible to change it for
-     * existing status/favorite entries.
-     * 
-     * @param c 
-     */
-    protected void updateStreamTagName(StreamTag c) {
-        if (c == null) {
-            return;
-        }
-        main.getStatusHistory().updateStreamTagName(c);
-        Map<String, String> tags = main.getStreamTagFavorites();
-        if (tags.containsKey(c.getId())) {
-            tags.put(c.getId(), c.getDisplayName());
-            main.setStreamTagFavorites(tags);
-        }
-    }
-    
     private void statusEdited() {
         statusEdited = true;
     }
@@ -650,8 +698,8 @@ public class StatusPanel extends JPanel {
     private void addCurrentToHistory() {
         String currentTitle = status.getText().trim();
         if (main.getSaveStatusHistorySetting()
-                || main.getStatusHistory().isFavorite(currentTitle, currentStreamCategory, currentStreamTags)) {
-            main.getStatusHistory().addUsed(currentTitle, currentStreamCategory, currentStreamTags);
+                || main.getStatusHistory().isFavorite(currentTitle, currentStreamCategory, currentStreamTags, currentStreamLabels)) {
+            main.getStatusHistory().addUsed(currentTitle, currentStreamCategory, currentStreamTags, StreamLabels.copyEditableLabelsOnly(currentStreamLabels));
         }
     }
     
@@ -659,7 +707,35 @@ public class StatusPanel extends JPanel {
      * Adds the current status to the preset favorites
      */
     private void addCurrentToFavorites() {
-        main.getStatusHistory().addFavorite(status.getText().trim(), currentStreamCategory, currentStreamTags);
+        main.getStatusHistory().addFavorite(status.getText().trim(), currentStreamCategory, currentStreamTags, StreamLabels.copyEditableLabelsOnly(currentStreamLabels));
+    }
+
+    @Override
+    public Dimension getPreferredScrollableViewportSize() {
+        return getPreferredSize();
+    }
+
+    @Override
+    public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
+        return 20;
+    }
+
+    @Override
+    public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
+        return 20;
+    }
+
+    /**
+     * Still resize horizontally despite this panel being in a scrollpane.
+     */
+    @Override
+    public boolean getScrollableTracksViewportWidth() {
+        return true;
+    }
+
+    @Override
+    public boolean getScrollableTracksViewportHeight() {
+        return false;
     }
     
     private static class CacheItem {
@@ -668,14 +744,16 @@ public class StatusPanel extends JPanel {
         public final String title;
         public final StreamCategory category;
         public final List<StreamTag> tags;
+        public final List<StreamLabel> labels;
         public final boolean statusEdited;
         public final long lastLoaded;
         
-        public CacheItem(String channel, String title, StreamCategory category, List<StreamTag> tags, boolean statusEdited, long lastLoaded) {
+        public CacheItem(String channel, String title, StreamCategory category, List<StreamTag> tags, List<StreamLabel> labels, boolean statusEdited, long lastLoaded) {
             this.channel = channel;
             this.title = title;
             this.category = category;
             this.tags = new ArrayList<>(tags);
+            this.labels = new ArrayList<>(labels);
             this.statusEdited = statusEdited;
             this.lastLoaded = lastLoaded;
         }
@@ -685,7 +763,7 @@ public class StatusPanel extends JPanel {
     private void saveToCache() {
         if (!loading && !StringUtil.isNullOrEmpty(currentChannel)) {
             cache.put(currentChannel, new CacheItem(currentChannel, status.getText(),
-                    currentStreamCategory, currentStreamTags, statusEdited, infoLastLoaded));
+                    currentStreamCategory, currentStreamTags, currentStreamLabels, statusEdited, infoLastLoaded));
         }
     }
     
@@ -697,6 +775,7 @@ public class StatusPanel extends JPanel {
                 currentStreamCategory = item.category;
                 game.setText(item.category.name);
                 setTags(item.tags);
+                setLabels(item.labels);
                 statusEdited = item.statusEdited;
                 infoLastLoaded = item.lastLoaded;
                 return true;

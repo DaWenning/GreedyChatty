@@ -671,6 +671,16 @@ public class DockManager {
                 }
             });
         }
+        /**
+         * Set currently unique id.
+         *
+         * If this is called when loading a layout, the id may be changed
+         * afterwards, but in that case the id of all currently open popouts
+         * will be set correctly (assuming the loaded layout is not invalid).
+         * Any popouts opened afterwards will then avoid any ids from the layout
+         * by setting a currently unique id here.
+         */
+        popout.setId(popouts);
         return popout;
     }
     
@@ -698,7 +708,33 @@ public class DockManager {
     
     private void updateWindowsAlwaysOnTop(boolean onTop) {
         for (DockPopout p : popouts) {
-            p.getWindow().setAlwaysOnTop(onTop);
+            if (!(p instanceof DockPopoutFrame)
+                    || !((DockPopoutFrame)p).isFixedAlwaysOnTop()) {
+                p.getWindow().setAlwaysOnTop(onTop);
+            }
+        }
+    }
+    
+    /**
+     * If the given frame is currently a popout, prevent the DockManager from
+     * automatically changing the always on top property. When this is called
+     * with {@code fixed} false, the always on top property is synced with the
+     * popoutParent again.
+     * <p>
+     * The setAlwaysOnTop method may still have to be called to get the desired
+     * state, this just ensures that it is not changed by the DockManager.
+     *
+     * @param frame
+     * @param fixed
+     */
+    public void setWindowFixedAlwaysOnTop(JFrame frame, boolean fixed) {
+        for (DockPopout p : popouts) {
+            if (p.getWindow() instanceof DockPopoutFrame && p.getWindow() == frame) {
+                ((DockPopoutFrame) p).setFixedAlwaysOnTop(fixed);
+            }
+        }
+        if (!fixed) {
+            updateWindowsAlwaysOnTop(popoutParent.isAlwaysOnTop());
         }
     }
     

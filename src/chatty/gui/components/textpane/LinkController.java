@@ -18,9 +18,13 @@ import chatty.gui.components.menus.TextSelectionMenu;
 import chatty.gui.components.menus.UrlContextMenu;
 import chatty.gui.components.menus.UserContextMenu;
 import chatty.gui.components.menus.UsericonContextMenu;
+import chatty.gui.components.textpane.ChannelTextPane.Attribute;
 import static chatty.gui.components.textpane.SettingConstants.USER_HOVER_HL_CTRL;
 import static chatty.gui.components.textpane.SettingConstants.USER_HOVER_HL_MENTIONS;
 import static chatty.gui.components.textpane.SettingConstants.USER_HOVER_HL_MENTIONS_CTRL_ALL;
+import chatty.gui.notifications.Notification;
+import chatty.lang.Language;
+import chatty.util.CombinedEmoticon;
 import chatty.util.DateTime;
 import chatty.util.Debugging;
 import chatty.util.ReplyManager;
@@ -194,6 +198,14 @@ public class LinkController extends MouseAdapter {
                 handleSingleLeftClick(e, element);
             }
         }
+        else if (e.getClickCount() == 1
+                && SwingUtilities.isMiddleMouseButton(e)
+                && !e.isPopupTrigger()) {
+            Element element = getElement(e);
+            if (element != null) {
+                handleSingleMiddleClick(e, element);
+            }
+        }
         else if (e.isPopupTrigger()) {
             openContextMenu(e);
         }
@@ -229,6 +241,18 @@ public class LinkController extends MouseAdapter {
         } else if ((usericonImage = getUsericonImage(element)) != null) {
             for (UserListener listener : userListener) {
                 listener.usericonClicked(usericonImage.getObject(), e);
+            }
+        }
+    }
+    
+    private void handleSingleMiddleClick(MouseEvent e, Element element) {
+        User user;
+        if ((user = getUser(element)) != null || (user = getMention(element)) != null) {
+            for (UserListener listener : userListener) {
+                final User finalUser = user;
+                SwingUtilities.invokeLater(() -> {
+                    listener.userClicked(finalUser, getMsgId(element), getAutoModMsgId(element), e);
+                });
             }
         }
     }
@@ -279,6 +303,8 @@ public class LinkController extends MouseAdapter {
         String replacedText = getReplacedText(element);
         String replyMsgId = getReplyText(element);
         User mention = getMention(element);
+        String hypeChatInfo = (String) element.getAttributes().getAttribute(Attribute.HYPE_CHAT);
+        boolean isRestricted = element.getAttributes().getAttribute(ChannelTextPane.Attribute.IS_RESTRICTED) != null;
         if (emoteImage != null) {
             popup.show(textPane, element, p -> makeEmoticonPopupText(emoteImage, popupImagesEnabled, p, element), emoteImage.getImageIcon().getIconWidth());
         } else if (usericonImage != null) {
@@ -289,6 +315,10 @@ public class LinkController extends MouseAdapter {
             popup.show(textPane, element, p -> makeReplyPopupText(replyMsgId, p), 1);
         } else if (mention != null && mentionMessages > 0) {
             popup.show(textPane, element, p -> makeMentionPopupText(mention, p, mentionMessages), 1);
+        } else if (isRestricted) {
+            popup.show(textPane, element, p -> p.setText(POPUP_HTML_PREFIX+"Message not posted to chat (restricted)"), 1);
+        } else if (hypeChatInfo != null) {
+            popup.show(textPane, element, p -> p.setText(POPUP_HTML_PREFIX+hypeChatInfo), 1);
         } else {
             popup.hide();
         }
@@ -299,7 +329,9 @@ public class LinkController extends MouseAdapter {
                 || (user = getUser(element)) != null
                 || mention != null
                 || emoteImage != null
-                || usericonImage != null;
+                || usericonImage != null
+                || isRestricted
+                || hypeChatInfo != null;
         
         if (isClickableElement) {
             textPane.setCursor(HAND_CURSOR);
@@ -381,12 +413,8 @@ public class LinkController extends MouseAdapter {
         return (String)(e.getAttributes().getAttribute(ChannelTextPane.Attribute.REPLY_PARENT_MSG_ID));
     }
     
-    private Object getHighlightSource(Element e) {
-        return e.getAttributes().getAttribute(ChannelTextPane.Attribute.HIGHLIGHT_SOURCE);
-    }
-    
-    private Object getCustomColorSource(Element e) {
-        return e.getAttributes().getAttribute(ChannelTextPane.Attribute.CUSTOM_COLOR_SOURCE);
+    private Object getSource(Attribute attribute, Element e) {
+        return e.getAttributes().getAttribute(attribute);
     }
     
     private String getSelectedText(MouseEvent e) {
@@ -460,7 +488,7 @@ public class LinkController extends MouseAdapter {
         }
         else if (link != null) {
             if (link.startsWith("join.")) {
-                String c = link.substring("join.".length());
+                String c = Helper.toStream(link.substring("join.".length()));
                 m = new StreamsContextMenu(Arrays.asList(new String[]{c}), contextMenuListener);
             }
         }
@@ -795,28 +823,23 @@ public class LinkController extends MouseAdapter {
     
     private static String makeEmoticonPopupText2(CachedImage<Emoticon> emoticonImage, boolean showImage, MyPopup popup) {
         Emoticon emote = emoticonImage.getObject();
-        String result = "";
-        if (emote.type == Emoticon.Type.TWITCH) {
-            if (emote.subType == Emoticon.SubType.CHEER) {
-                result = "Cheering Emote";
-                if (emote.hasStreamRestrictions()) {
-                    result += " Local";
-                } else {
-                    result += " Global";
-                }
-            } else {
-                result = TwitchEmotesApi.getEmoteType(emote);
+        String result = getEmoteType(emote);
+        String code = emote.type == Emoticon.Type.EMOJI
+                ? emote.stringId
+                : Emoticons.toWriteable(emote.code);
+        
+        if (emote instanceof CombinedEmoticon) {
+            List<Emoticon> combinedEmotes = ((CombinedEmoticon) emote).getEmotes();
+            code = combinedEmotes.get(0).code;
+            String combinedWith = "";
+            for (int i=1; i<combinedEmotes.size(); i++) {
+                Emoticon cEmote = combinedEmotes.get(i);
+                combinedWith += String.format("<br />+ <span style='font-weight:bold'>%s</span> (%s)",
+                        Helper.htmlspecialchars_encode(cEmote.code),
+                        getEmoteType(cEmote));
             }
-        } else if (emote.type == Emoticon.Type.CUSTOM2) {
-            result = "Local Emote";
-        } else {
-            result = emote.type.label;
-            if (emote.type != Emoticon.Type.EMOJI) {
-                if (emote.hasStreamRestrictions()) {
-                    result += " Local";
-                } else {
-                    result += " Global";
-                }
+            if (!combinedWith.isEmpty()) {
+                result += "<br />"+combinedWith;
             }
         }
 
@@ -824,18 +847,50 @@ public class LinkController extends MouseAdapter {
             result += " [" + emoticonImage.getImageIcon().getDescription() + "]";
         }
 
-        if (showImage && !emote.isAnimated()) {
-            CachedImage<Emoticon> icon = emote.getIcon(2, 0, ImageType.STATIC, (o,n,c) -> {
+        if (showImage) {
+            CachedImage<Emoticon> icon = emote.getIcon(2, 0, ImageType.ANIMATED_DARK, (o,n,c) -> {
                 // The set ImageIcon will have been updated
                 popup.forceUpdate();
             });
             popup.setIcon(icon.getImageIcon());
         }
-        String code = emote.type == Emoticon.Type.EMOJI ? emote.stringId : Emoticons.toWriteable(emote.code);
         return String.format("%s%s<br /><span style='font-weight:normal'>%s</span>",
                 POPUP_HTML_PREFIX,
                 Helper.htmlspecialchars_encode(code),
                 result);
+    }
+    
+    private static String getEmoteType(Emoticon emote) {
+        String result;
+        if (emote.type == Emoticon.Type.TWITCH) {
+            if (emote.subType == Emoticon.SubType.CHEER) {
+                result = "Cheering Emote";
+                if (emote.hasStreamRestrictions()) {
+                    result += " Local";
+                }
+                else {
+                    result += " Global";
+                }
+            }
+            else {
+                result = TwitchEmotesApi.getEmoteType(emote);
+            }
+        }
+        else if (emote.type == Emoticon.Type.CUSTOM2) {
+            result = "Local Emote";
+        }
+        else {
+            result = emote.type.label;
+            if (emote.type != Emoticon.Type.EMOJI) {
+                if (emote.hasStreamRestrictions()) {
+                    result += " Local";
+                }
+                else {
+                    result += " Global";
+                }
+            }
+        }
+        return result;
     }
     
     //----------------
@@ -863,6 +918,9 @@ public class LinkController extends MouseAdapter {
         }
         if (Debugging.isEnabled("tt")) {
             info += " ["+usericonImage.getImageIcon().getDescription()+"]";
+        }
+        if (usericon.metaDescription != null && !usericon.metaDescription.isEmpty()) {
+            info += "<br />"+usericon.metaDescription;
         }
         if (!StringUtil.isNullOrEmpty(moreInfo)) {
             info += "<br />("+moreInfo+")";
@@ -969,36 +1027,22 @@ public class LinkController extends MouseAdapter {
      * @param element 
      */
     private void addMessageInfoItems(JPopupMenu m, Element element) {
-        Object highlightSource = getHighlightSource(element);
-        Object colorSource = getCustomColorSource(element);
-        String highlight = "Highlight";
-        if (type == ChannelTextPane.Type.IGNORED) {
-            // Highlight is used for ignore in Ignored Messages dialog
-            highlight = "Ignore";
-        }
-        if (highlightSource != null || colorSource != null) {
+        Object highlightSource = getSource(Attribute.HIGHLIGHT_SOURCE, element);
+        Object ignoreSource = getSource(Attribute.IGNORE_SOURCE, element);
+        Object colorSource = getSource(Attribute.CUSTOM_COLOR_SOURCE, element);
+        Object routingSource = getSource(Attribute.ROUTING_SOURCE, element);
+        
+        if (highlightSource != null
+                || ignoreSource != null
+                || colorSource != null
+                || routingSource != null) {
             JMenu menu = new JMenu("Message Info");
             
-            /**
-             * Treat a single highlight item (meaning no further text matches
-             * from other items, or setting disabled) as before and show
-             * combined if possible, otherwise show separately.
-             */
-            Object highlightSourceItem = null;
-            if (highlightSource != null && highlightSource instanceof List
-                    && ((List) highlightSource).size() == 1) {
-                highlightSourceItem = ((List) highlightSource).get(0);
-            }
-            else {
-                highlightSourceItem = highlightSource;
-            }
-            if (highlightSourceItem == colorSource) {
-                addMessageInfoItem(menu, highlight+"/Custom Color Source", highlightSourceItem);
-            }
-            else {
-                addMessageInfoItem(menu, highlight+" Source", highlightSource);
-                addMessageInfoItem(menu, "Custom Color Source", colorSource);
-            }
+            addMessageInfoItem(menu, "Highlight Source", highlightSource);
+            addMessageInfoItem(menu, "Ignore Source", ignoreSource);
+            addMessageInfoItem(menu, "Custom Color Source", colorSource);
+            addMessageInfoItem(menu, "Routing Source", routingSource);
+            
             m.addSeparator();
             m.add(menu);
         }
@@ -1037,24 +1081,65 @@ public class LinkController extends MouseAdapter {
             if (source instanceof ColorItem) {
                 sourceType = "msgColorSource";
                 sourceText = ((ColorItem)source).getId();
-                sourceLabel = "Msg. Color: "+sourceText;
+                sourceLabel = "["+Language.getString("settings.page.msgColors")+"] "+sourceText;
+            }
+            else if (source instanceof Notification) {
+                Notification n = (Notification) source;
+                sourceType = "notificationSource";
+                sourceText = String.valueOf(n.id);
+                sourceLabel = String.format("[%s] %s",
+                        Language.getString("settings.page.notifications"),
+                        n.toString());
             }
             else if (source instanceof List) {
-                List<Highlighter.HighlightItem> list = (List) source;
-                JSONArray rawList = new JSONArray();
-                list.forEach(entry -> rawList.add(entry.getRaw()));
-                sourceText = rawList.toJSONString();
-                if (type == ChannelTextPane.Type.IGNORED) {
-                    sourceType = "ignoreSource";
-                    sourceLabel = "Ignore: ";
+                Object sourceItem = getSingleItem(source);
+                if (sourceItem instanceof Highlighter.HighlightItem) {
+                    Highlighter.HighlightItem hlItem = (Highlighter.HighlightItem) sourceItem;
+                    if (hlItem.getUsedForFeature() != null) {
+                        switch (hlItem.getUsedForFeature()) {
+                            case "highlight":
+                                sourceType = "highlightSource";
+                                sourceLabel = Language.getString("settings.page.highlight");
+                                break;
+                            case "ignore":
+                                sourceType = "ignoreSource";
+                                sourceLabel = Language.getString("settings.page.ignore");
+                                break;
+                            case "msgcolor":
+                                sourceType = "msgColorSource";
+                                sourceLabel = Language.getString("settings.page.msgColors");
+                                break;
+                            case "routing":
+                                sourceType = "routingSource";
+                                sourceLabel = Language.getString("settings.page.customTabs");
+                                break;
+                            case "noPresetsUsernameHighlight":
+                                sourceType = "highlightSource";
+                                sourceLabel = Language.getString("settings.boolean.highlightUsername");
+                                break;
+                            default:
+                                sourceType = "unknownSource";
+                                sourceLabel = "Unknown";
+                        }
+                    }
+                    else {
+                        sourceType = "unknownSource";
+                        sourceLabel = "UnknownType";
+                    }
+                    List<Highlighter.HighlightItem> list = (List) source;
+                    JSONArray rawList = new JSONArray();
+                    list.forEach(entry -> rawList.add(entry.getRaw()));
+                    sourceText = rawList.toJSONString();
+                    sourceLabel = "["+sourceLabel+"] ";
+                    sourceLabel += list.get(0).getRaw();
+                    if (list.size() > 1) {
+                        sourceLabel += " (and " + (list.size() - 1) + " more for marked matches)";
+                    }
                 }
                 else {
-                    sourceType = "highlightSource";
-                    sourceLabel = "Highlight: ";
-                }
-                sourceLabel += list.get(0).getRaw();
-                if (list.size() > 1) {
-                    sourceLabel += " (and " + (list.size() - 1) + " more for marked matches)";
+                    sourceType = "";
+                    sourceText = "";
+                    sourceLabel = "";
                 }
             }
             else {
@@ -1068,6 +1153,14 @@ public class LinkController extends MouseAdapter {
             item.setToolTipText(sourceLabel);
             menu.add(item);
         }
+    }
+    
+    private static Object getSingleItem(Object o) {
+        if (o != null && o instanceof List
+                && !((List) o).isEmpty()) {
+            return ((List) o).get(0);
+        }
+        return o;
     }
     
 }

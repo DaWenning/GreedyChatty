@@ -33,14 +33,13 @@ public class WebPUtil {
     
     private static final List<Runnable> waiting = new ArrayList<>();
     
+    private static boolean useWebP;
+    
     private static boolean checking;
     private static boolean checked;
     private static boolean available;
     
     public static void runIfWebPAvailable(Runnable runnable) {
-        if (!MiscUtil.OS_WINDOWS && !MiscUtil.OS_LINUX) {
-            return;
-        }
         if (isAvailable()) {
             runnable.run();
             return;
@@ -86,6 +85,18 @@ public class WebPUtil {
         }
     }
     
+    public static void setUseWebP(boolean enabled) {
+        synchronized(LOCK) {
+            useWebP = enabled;
+        }
+    }
+    
+    public static boolean shouldUseWebP() {
+        synchronized(LOCK) {
+            return useWebP && isAvailable();
+        }
+    }
+    
     public static boolean isAvailable() {
         synchronized(LOCK) {
             return available;
@@ -104,7 +115,7 @@ public class WebPUtil {
             LOGGER.info("WebP Decoding available: "+success);
             return success;
         }
-        catch (IOException ex) {
+        catch (IOException | UnsatisfiedLinkError ex) {
             LOGGER.warning("Error checking WebP: "+ex);
         }
         return false;
@@ -117,7 +128,7 @@ public class WebPUtil {
         try {
             WebPImage img = WebPDecoder.decode(data);
             Dimension size = new Dimension();
-            Dimension actualBaseSize = new Dimension(img.canvasWidth, img.canvasHeight);
+            Dimension actualBaseSize = request.getUrlFactorCorrectedSize(img.canvasWidth, img.canvasHeight);
             Dimension scaledSize = request.getScaledSizeIfNecessary(actualBaseSize);
             if (img.frameCount == 1) {
                 ImageIcon icon = new ImageIcon(img.frames.get(0).img);

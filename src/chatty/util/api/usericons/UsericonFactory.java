@@ -2,6 +2,7 @@
 package chatty.util.api.usericons;
 
 import chatty.Chatty;
+import chatty.Chatty.PathType;
 import chatty.Helper;
 import chatty.util.ImageCache;
 import chatty.util.ImageCache.ImageResult;
@@ -67,7 +68,7 @@ public class UsericonFactory {
             String title) {
         try {
             URL url = new URL(Helper.checkHttpUrl(urlString));
-            URL url2 = new URL(Helper.checkHttpUrl(url2String));
+            URL url2 = Helper.createUrlNoError(Helper.checkHttpUrl(url2String));
             Usericon.Builder b = new Usericon.Builder(type, source);
             b.setChannel(channel);
             b.setUrl(url);
@@ -86,7 +87,7 @@ public class UsericonFactory {
             String description, String clickUrl) {
         try {
             URL url = new URL(Helper.checkHttpUrl(urlString));
-            URL url2 = new URL(Helper.checkHttpUrl(url2String));
+            URL url2 = Helper.createUrlNoError(Helper.checkHttpUrl(url2String));
             Usericon.Builder b = new Usericon.Builder(Usericon.Type.TWITCH, SOURCE_TWITCH2);
             b.setChannel(channel);
             b.setBadgeType(id, version);
@@ -107,7 +108,7 @@ public class UsericonFactory {
             Set<String> usernames, Set<String> userids, String position) {
         try {
             URL url = new URL(Helper.checkHttpUrl(urlString));
-            URL url2 = new URL(Helper.checkHttpUrl(url2String));
+            URL url2 = Helper.createUrlNoError(Helper.checkHttpUrl(url2String));
             Usericon.Builder b = new Usericon.Builder(Usericon.Type.OTHER, SOURCE_OTHER);
             b.setBadgeType(id, version);
             b.setUrl(url);
@@ -161,7 +162,7 @@ public class UsericonFactory {
                 if (fileName.startsWith("http")) {
                     url = new URL(fileName);
                 } else if (!fileName.trim().isEmpty()) {
-                    Path path = Paths.get(Chatty.getImageDirectory()).resolve(Paths.get(fileName));
+                    Path path = Chatty.getPathCreate(PathType.IMAGE).resolve(Paths.get(fileName));
                     url = path.toUri().toURL();
                 }
             }

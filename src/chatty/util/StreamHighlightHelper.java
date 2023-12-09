@@ -2,6 +2,7 @@
 package chatty.util;
 
 import chatty.Chatty;
+import chatty.Chatty.PathType;
 import chatty.Helper;
 import chatty.Logging;
 import chatty.User;
@@ -18,10 +19,11 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import static java.nio.file.StandardOpenOption.APPEND;
 import static java.nio.file.StandardOpenOption.CREATE;
 import static java.nio.file.StandardOpenOption.WRITE;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.logging.Logger;
 
 /**
@@ -44,11 +46,12 @@ public class StreamHighlightHelper {
     
     private long lastStreamStartWritten = -1;
     
+    private final Map<String, ElapsedTime> highlightLastAdded = new HashMap<>();
+    
     public StreamHighlightHelper(Settings settings, TwitchApi api) {
         this.settings = settings;
         this.api = api;
-        // Chatty.getExportDirectory() should create the directory
-        this.file = Paths.get(Chatty.getExportDirectory()+FILE_NAME);
+        this.file = Chatty.getPathCreate(PathType.EXPORT).resolve(FILE_NAME);
     }
     
     /**
@@ -95,7 +98,7 @@ public class StreamHighlightHelper {
         // All challenges successfully completed
         //---------------------------------------
         String comment = line.substring(command.length()).trim();
-        return addHighlight(channel, "["+user.getDisplayNick()+"] "+comment, user);
+        return addHighlight(channel, comment, user);
     }
     
     /**
@@ -113,8 +116,17 @@ public class StreamHighlightHelper {
         if (channel == null || channel.isEmpty() || !Helper.isRegularChannel(channel)) {
             return "Failed adding stream highlight (no channel).";
         }
+        if (!checkCooldown(channel)) {
+            return "Stream highlight not added (cooldown).";
+        }
+        
+        String rawComment = comment;
+        if (comment != null && chatUser != null) {
+            comment = "["+chatUser.getDisplayNick()+"] "+comment;
+        }
         
         boolean createdMarker = addStreamMarker(channel, comment);
+        String createdMarkerText = createdMarker ? " (Created Stream Marker)" : "";
         
         // Get StreamInfo
         StreamInfo streamInfo = api.getStreamInfo(Helper.toStream(channel), null);
@@ -134,11 +146,51 @@ public class StreamHighlightHelper {
                 channel,
                 streamTime,
                 !comment.isEmpty() ? " "+comment : "",
-                createdMarker ? " (Created Stream Marker)" : "");
+                createdMarkerText);
+        
+        String shortComment = "";
+        if (!comment.isEmpty()) {
+            shortComment = "(" + StringUtil.shortenTo(comment, 30) + ")";
+        }
+        
+        // Parameters
+        Parameters params = Parameters.create("");
+        params.put("added", "highlight" + (createdMarker ? "/marker" : ""));
+        params.put("addedmarker", createdMarker ? "true" : "");
+        params.put("chan", channel);
+        params.put("uptime", streamTime);
+        params.put("timestamp", DateTime.fullDateTime());
+        params.put("comment", shortComment);
+        params.put("rawcomment", rawComment);
+        params.put("fullcomment", comment.isEmpty() ? "" : "(" + comment + ")");
+        if (chatUser != null) {
+            params.put("chatuser", chatUser.getRegularDisplayNick());
+            params.putObject("user", chatUser);
+        }
+        if (streamInfo.isValid()) {
+            params.putObject("streamInfo", streamInfo);
+        }
+        
+        if (settings.getBoolean("streamHighlightCustomEnabled")) {
+            CustomCommand cc = CustomCommand.parse(settings.getString("streamHighlightCustom"));
+            if (cc.hasError()) {
+                /**
+                 * Fail in case of error (don't fall back to default because the
+                 * user wouldn't immediately notice what is written to file).
+                 */
+                return "Failed adding stream highlight (error in custom format)."+createdMarkerText;
+            }
+            String ccResult = cc.replace(params);
+            if (StringUtil.isNullOrEmpty(ccResult)) {
+                return "Failed adding stream highlight (empty)."+createdMarkerText;
+            }
+            line = ccResult;
+        }
         
         synchronized(this) {
             // Add seperator if probably new stream
-            if (streamInfo.getTimeStarted() != lastStreamStartWritten) {
+            if (streamInfo.getTimeStarted() != lastStreamStartWritten
+                    && settings.getBoolean("streamHighlightExtra")) {
                 addToFile("-");
             }
 
@@ -146,35 +198,46 @@ public class StreamHighlightHelper {
             boolean success = addToFile(line);
             if (success) {
                 lastStreamStartWritten = streamInfo.getTimeStarted();
-                String shortComment = "";
-                if (!comment.isEmpty()) {
-                    shortComment = "(" + StringUtil.shortenTo(comment, 30) + ")";
-                }
-                
-                // Parameters
-                Parameters params = Parameters.create("");
-                params.put("added", "highlight"+(createdMarker ? "/marker" : ""));
-                params.put("chan", channel);
-                params.put("uptime", streamTime);
-                params.put("comment", shortComment);
-                params.put("fullcomment", comment.isEmpty() ? "" : "("+comment+")");
-                if (chatUser != null) {
-                    params.put("chatuser", chatUser.getRegularDisplayNick());
-                    params.putObject("user", chatUser);
-                }
+                cooldownSetAdded(channel);
                 
                 // Command
                 String template = settings.getString("streamHighlightResponseMsg");
                 CustomCommand cc = CustomCommand.parse(template);
-                String result = cc.replace(params);
+                String result = null;
+                if (!cc.hasError()) {
+                    result = cc.replace(params);
+                }
                 if (StringUtil.isNullOrEmpty(StringUtil.trim(result))) {
-                    // Use default in case of error or empty command
+                    /**
+                     * Use default in case of error or empty command (the user
+                     * should notice the result in chat, so it should be fine to
+                     * fall back to default).
+                     */
                     result = CustomCommand.parse(settings.getStringDefault("streamHighlightResponseMsg")).replace(params);
                 }
                 return result;
             }
-            return "Failed adding stream highlight (write error)."+(createdMarker ? " (Created Stream Marker)" : "");
+            return "Failed adding stream highlight (write error)."+createdMarkerText;
         }
+    }
+    
+    private boolean checkCooldown(String channel) {
+        int cooldownSeconds = settings.getInt("streamHighlightCooldown");
+        if (cooldownSeconds <= 0) {
+            return true;
+        }
+        if (!highlightLastAdded.containsKey(channel)) {
+            highlightLastAdded.put(channel, new ElapsedTime());
+        }
+        return highlightLastAdded.get(channel).secondsElapsedSync(cooldownSeconds);
+    }
+    
+    private void cooldownSetAdded(String channel) {
+        if (settings.getInt("streamHighlightCooldown") <= 0
+                || !highlightLastAdded.containsKey(channel)) {
+            return;
+        }
+        highlightLastAdded.get(channel).setSync();
     }
     
     /**
@@ -203,7 +266,7 @@ public class StreamHighlightHelper {
         if (!file.toFile().exists()) {
             return "Error opening stream highlights file (not present).";
         }
-        if (MiscUtil.openFolder(file.toFile(), null)) {
+        if (MiscUtil.openFile(file.toFile(), null)) {
             return "Opened stream highlights file in default application.";
         }
         return "Error opening stream highlights file.";
@@ -216,8 +279,10 @@ public class StreamHighlightHelper {
                     String errorMessage = String.format("Error adding stream marker for %s (%s)",
                                     channel, e);
                     LOGGER.log(Logging.USERINFO, errorMessage);
-                    synchronized(this) {
-                        addToFile(DateTime.fullDateTime()+" "+errorMessage);
+                    if (settings.getBoolean("streamHighlightExtra")) {
+                        synchronized (this) {
+                            addToFile(DateTime.fullDateTime() + " " + errorMessage);
+                        }
                     }
                 }
             });

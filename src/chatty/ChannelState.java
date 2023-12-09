@@ -30,16 +30,12 @@ public class ChannelState {
     
     private boolean emoteOnly;
     
-    /**
-     * The name of the channel that is being hosted. Can be null to indicate no
-     * channe is being hosted.
-     */
-    private String hosting;
-    
     private String lang;
     
     // Should be -1, since 0 means on as well
     private int followersOnly = -1;
+    
+    private boolean shieldMode;
     
     /**
      * Cached info text based on the current state.
@@ -67,9 +63,6 @@ public class ChannelState {
         if (setSlowMode(-1)) {
             changed = true;
         }
-        if (setHosting(null)) {
-            changed = true;
-        }
         if (setR9kMode(false)) {
             changed = true;
         }
@@ -77,6 +70,9 @@ public class ChannelState {
             changed = true;
         }
         if (setFollowersOnly(-1)) {
+            changed = true;
+        }
+        if (setShieldMode(false)) {
             changed = true;
         }
         return changed;
@@ -160,30 +156,17 @@ public class ChannelState {
         return emoteOnly;
     }
     
-    /**
-     * Set the channel that is being hosted.
-     * 
-     * @param target The channel that is being hosted, or null to indicate no
-     * channe is being hosted
-     * @return true if setting this value changed the state, false otherwise
-     */
-    public synchronized boolean setHosting(String target) {
-        if ((hosting == null && target != null)
-                || (hosting != null && !hosting.equals(target))) {
-            this.hosting = target;
+    public synchronized boolean setShieldMode(boolean enabled) {
+        if (shieldMode != enabled) {
+            shieldMode = enabled;
             updateInfo();
             return true;
         }
         return false;
     }
     
-    /**
-     * Gets the channel name that is being hosted.
-     * 
-     * @return The name of the hosted channel, or null if none is being hosted
-     */
-    public synchronized String getHosting() {
-        return hosting;
+    public synchronized boolean shieldMode() {
+        return shieldMode;
     }
     
     public synchronized boolean setLang(String lang) {
@@ -220,12 +203,15 @@ public class ChannelState {
     private void updateInfo() {
         String result = "";
         String sep = "|";
+        if (shieldMode) {
+            result = StringUtil.append(result, sep, "Shield");
+        }
         if (slowMode == SLOWMODE_ON_INVALID || slowMode > 86400) {
-            result += "Slow: >day";
+            result = StringUtil.append(result, sep, "Slow: >day");
         } else if (slowMode > 999) {
-            result += "Slow: "+DateTime.duration(slowMode*1000, 1, 0);
+            result = StringUtil.append(result, sep, "Slow: "+DateTime.duration(slowMode*1000, 1, 0));
         } else if (slowMode > 0) {
-            result += "Slow: "+slowMode;
+            result  = StringUtil.append(result, sep, "Slow: "+slowMode);
         }
         if (subMode) {
             result = StringUtil.append(result, sep, "Sub");
@@ -242,9 +228,6 @@ public class ChannelState {
         }
         if (emoteOnly) {
             result = StringUtil.append(result, sep, "EmoteOnly");
-        }
-        if (hosting != null && !hosting.isEmpty()) {
-            result = StringUtil.append(result, sep, "Hosting: "+hosting);
         }
         if (lang != null && !lang.isEmpty()) {
             result = StringUtil.append(result, sep, lang);

@@ -17,11 +17,16 @@ import chatty.util.settings.Settings;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.io.UnsupportedEncodingException;
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.net.URLEncoder;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.function.Function;
 import java.util.logging.Logger;
@@ -135,9 +140,38 @@ public class Helper {
     public static String getChannelFromUrl(String url) {
         Matcher m = CHANNEL_URL_PATTERN.matcher(url);
         if (m.matches()) {
-            return m.group(1);
+            String channel = m.group(1);
+            if (channel.equals("popout")) {
+                TwitchPopoutUrlInfo popoutInfo = getPopoutUrlInfo(url);
+                if (popoutInfo != null) {
+                    return popoutInfo.channel;
+                }
+            }
+            return channel;
         }
         return url;
+    }
+    
+    public static TwitchPopoutUrlInfo getPopoutUrlInfo(String url) {
+        Matcher m = POPOUT_URL_PATTERN.matcher(url);
+        if (m.matches()) {
+            return new TwitchPopoutUrlInfo(m.group(1), m.group(2), m.group(3));
+        }
+        return null;
+    }
+    
+    public static class TwitchPopoutUrlInfo {
+        
+        public final String channel;
+        public final String type;
+        public final String username;
+        
+        private TwitchPopoutUrlInfo(String channel, String type, String username) {
+            this.channel = channel;
+            this.type = type;
+            this.username = username;
+        }
+        
     }
     
     public static String[] parseChannels(String channels, boolean prepend) {
@@ -170,7 +204,10 @@ public class Helper {
     public static final Pattern CHATROOM_PATTERN = Pattern.compile("(?i)^#?chatrooms:[0-9a-z-:]+$");
     public static final Pattern STREAM_PATTERN = Pattern.compile("(?i)^"+USERNAME_REGEX+"$");
     public static final Pattern WHISPER_PATTERN = Pattern.compile("(?i)^\\$"+USERNAME_REGEX+"$");
-    private static final Pattern CHANNEL_URL_PATTERN = Pattern.compile("(?:https?://)?(?:www\\.)?twitch\\.tv/("+USERNAME_REGEX+")[/a-z]*");
+    private static final String TWITCH_URL_PREFIX = "(?:https?://)?(?:www\\.)?twitch\\.tv";
+    private static final Pattern CHANNEL_URL_PATTERN = Pattern.compile(TWITCH_URL_PREFIX+"/("+USERNAME_REGEX+")[/a-zA-Z0-9_]*");
+    private static final Pattern POPOUT_URL_PATTERN = Pattern.compile(String.format("%s/popout/(%s)/([a-z]+)(?:/(%s)[/a-z]*)?",
+            TWITCH_URL_PREFIX, USERNAME_REGEX, USERNAME_REGEX));
     
     /**
      * Kind of relaxed valiadation if a channel, which can have a leading # or
@@ -670,6 +707,21 @@ public class Helper {
         return url;
     }
     
+    /**
+     * Return the created URL or null if the given URL is invalid.
+     * 
+     * @param url
+     * @return 
+     */
+    public static URL createUrlNoError(String url) {
+        try {
+            return new URL(url);
+        }
+        catch (MalformedURLException ex) {
+            return null;
+        }
+    }
+    
     public static String systemInfo() {
         return String.format("Java: %s (%s / %s) OS: %s (%s/%s) Locale: %s",
                 System.getProperty("java.version"),
@@ -940,6 +992,11 @@ public class Helper {
                 parameters.put("msg", m.text);
                 parameters.put("msg-time", String.valueOf(m.getTime()));
             }
+            User.SubMessage sm = user.getSubMessage(msgId);
+            if (sm != null) {
+                parameters.put("msg", sm.attached_message);
+                parameters.put("msg-time", String.valueOf(sm.getTime()));
+            }
         }
         if (autoModMsgId != null) {
             parameters.put("automod-msg-id", autoModMsgId);
@@ -949,6 +1006,12 @@ public class Helper {
             }
         }
         parameters.putObject("user", user);
+    }
+    
+    public static Parameters createRoomParameters(Room room) {
+        Parameters parameters = Parameters.create("");
+        parameters.putObject("room", room);
+        return parameters;
     }
     
     private static final Map<UserNotice, javax.swing.Timer> pointsMerge = new HashMap<>();
@@ -1150,6 +1213,12 @@ public class Helper {
         frame.pack();
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
+    }
+    
+    private static final Instant CHAT_COMMAND_SHUTOFF = ZonedDateTime.of(2023, 2, 10, 0, 0, 0, 0, ZoneId.of("-07:00")).toInstant();
+    
+    public static boolean isBeforeChatCommandsShutoff() {
+        return Instant.now().isBefore(CHAT_COMMAND_SHUTOFF);
     }
     
 }

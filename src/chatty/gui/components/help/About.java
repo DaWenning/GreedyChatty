@@ -142,6 +142,7 @@ public class About extends JFrame implements ActionListener {
         webButton.addActionListener(buttonAction);
         
         currentLocation = new JTextField(20);
+        currentLocation.setEditable(false);
         JPanel currentLocationPanel = new JPanel(new BorderLayout());
         currentLocationPanel.setBorder(BorderFactory.createEmptyBorder(4, 5, 5, 5));
         currentLocationPanel.setOpaque(false);
@@ -180,7 +181,7 @@ public class About extends JFrame implements ActionListener {
 
         pack();
         
-        CachedManager m = new CachedManager(Chatty.getCacheDirectory()+"patreon", 60*60*24*3, "Patreon") {
+        CachedManager m = new CachedManager(Chatty.getPathCreate(Chatty.PathType.CACHE).resolve("patreon").toString(), 60*60*24*3, "Patreon") {
             
             @Override
             public boolean handleData(String data) {

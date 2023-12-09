@@ -91,7 +91,7 @@ public class CompletionSettings extends SettingsPanel {
         CustomCompletionEntries customCompletionDialog = new CustomCompletionEntries(d);
         
         JButton editCustomCompletion = new JButton("Edit Custom Completion Items");
-        editCustomCompletion.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
+        GuiUtil.smallButtonInsets(editCustomCompletion);
         editCustomCompletion.addActionListener(e -> {
             customCompletionDialog.show(d);
         });
@@ -180,7 +180,7 @@ public class CompletionSettings extends SettingsPanel {
         
         public CustomCompletionEntries(JDialog owner) {
             this.owner = owner;
-            this.editor = d.addStringMapSetting("customCompletion", 270, 180);
+            this.editor = d.addStringMapSetting("customCompletion", 270, 180, "Key", "Value");
             this.editor.setKeyFilter("[^\\w]");
         }
         

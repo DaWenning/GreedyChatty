@@ -55,9 +55,9 @@ public class TabSettings extends SettingsPanel {
         JPanel layoutPanel = new JPanel(new GridBagLayout());
         JPanel orderPanel = new JPanel(new GridBagLayout());
         
-        mainTabs.addTab(Language.getString("settings.tabs.tab.behavior"), mainPanel);
-        mainTabs.addTab(Language.getString("settings.tabs.tab.layout"), layoutPanel);
-        mainTabs.addTab(Language.getString("settings.tabs.tab.order"), orderPanel);
+        mainTabs.addTab(Language.getString("settings.tabs.tab.behavior"), SettingsUtil.topAlign(mainPanel, 20));
+        mainTabs.addTab(Language.getString("settings.tabs.tab.layout"), SettingsUtil.topAlign(layoutPanel, 20));
+        mainTabs.addTab(Language.getString("settings.tabs.tab.order"), SettingsUtil.topAlign(orderPanel, 20));
         
         //--------------------------
         // Tabs Order
@@ -76,13 +76,15 @@ public class TabSettings extends SettingsPanel {
         TabsPrefixPos channelPrefix = new TabsPrefixPos(d, "#", tabsPos.getSetting());
         TabsPrefixPos whisperPrefix = new TabsPrefixPos(d, "$", tabsPos.getSetting());
         TabsPrefixPos dialogsPrefix = new TabsPrefixPos(d, "-", tabsPos.getSetting());
+        TabsPrefixPos customTabsPrefix = new TabsPrefixPos(d, "'", tabsPos.getSetting());
         
         SettingsUtil.addLabeledComponent(orderPanel, "settings.tabsOrder.channel", 0, 1, 3, GridBagConstraints.WEST, channelPrefix);
         SettingsUtil.addLabeledComponent(orderPanel, "settings.tabsOrder.whisper", 0, 2, 3, GridBagConstraints.WEST, whisperPrefix);
         SettingsUtil.addLabeledComponent(orderPanel, "settings.tabsOrder.dialogs", 0, 3, 3, GridBagConstraints.WEST, dialogsPrefix);
+        SettingsUtil.addLabeledComponent(orderPanel, "settings.tabsOrder.customTabs", 0, 4, 3, GridBagConstraints.WEST, customTabsPrefix);
         
         JButton tabsPosButton = new JButton("Advanced Tabs Order");
-        tabsPosButton.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
+        GuiUtil.smallButtonInsets(tabsPosButton);
         tabsPosButton.addActionListener(e -> {
             tabsPos.show(TabSettings.this);
         });
@@ -91,7 +93,9 @@ public class TabSettings extends SettingsPanel {
             channelPrefix.update(data);
             whisperPrefix.update(data);
             dialogsPrefix.update(data);
+            customTabsPrefix.update(data);
         });
+        
         orderPanel.add(tabsPosButton,
                 SettingsDialog.makeGbc(0, 5, 1, 1, GridBagConstraints.WEST));
         
@@ -148,10 +152,8 @@ public class TabSettings extends SettingsPanel {
         SettingsUtil.addLabeledComponent(layoutPanel, "tabsMaxWidth", 0, 5, 3, GridBagConstraints.WEST,
                 d.addSimpleLongSetting("tabsMaxWidth", 3, true));
         
-        // Fill up remaining space to top-align components
-        gbc = SettingsDialog.makeGbc(0, 6, 4, 1, GridBagConstraints.WEST);
-        gbc.weighty = 1;
-        layoutPanel.add(new JLabel(), gbc);
+        layoutPanel.add(d.addSimpleBooleanSetting("tabsHideIfSingle"),
+                d.makeGbc(0, 6, 3, 1));
         
         //--------------------------
         // Close Empty Tab Panes
@@ -167,8 +169,6 @@ public class TabSettings extends SettingsPanel {
         mainPanel.add(scroll,
                 d.makeGbc(0, 7, 4, 1, GridBagConstraints.WEST));
         gbc = d.makeGbcSub(0, 8, 4, 1, GridBagConstraints.NORTHWEST);
-        // Fill up remaining space
-        gbc.weighty = 1;
         mainPanel.add(scroll2,
                 gbc);
 
@@ -321,9 +321,9 @@ public class TabSettings extends SettingsPanel {
                     Channels.DockChannelContainer.CUSTOM_COLOR_START_BIT);
             customColor.setSettingValue(HtmlColors.getNamedColorString(color));
         }
-        
+
     }
-    
+        
     private static class TabsPrefixPos extends JPanel {
         
         private final SettingsDialog d;
@@ -369,7 +369,39 @@ public class TabSettings extends SettingsPanel {
         
         private TabsPos(SettingsDialog d) {
             this.d = d;
-            this.editor = d.addLongMapSetting("tabsPos", 300, 200);
+            this.editor = d.addLongMapSetting("tabsPos", 300, 200, "Tab Name", "Position Value");
+            editor.setValueFilter("[^0-9-]");
+            // Listener must not be lazy init so it's there when data is loaded
+            editor.setTableEditorListener(new TableEditor.TableEditorListener<SimpleTableEditor.MapItem<Long>>() {
+                @Override
+                public void itemAdded(SimpleTableEditor.MapItem<Long> item) {
+                    informChangeListener(editor.getSettingValue());
+                }
+
+                @Override
+                public void itemRemoved(SimpleTableEditor.MapItem<Long> item) {
+                    informChangeListener(editor.getSettingValue());
+                }
+
+                @Override
+                public void itemEdited(SimpleTableEditor.MapItem<Long> oldItem, SimpleTableEditor.MapItem<Long> newItem) {
+                    informChangeListener(editor.getSettingValue());
+                }
+
+                @Override
+                public void allItemsChanged(List<SimpleTableEditor.MapItem<Long>> newItems) {
+                    informChangeListener(editor.getSettingValue());
+                }
+
+                @Override
+                public void refreshData() {
+                }
+
+                @Override
+                public void itemsSet() {
+                    informChangeListener(editor.getSettingValue());
+                }
+            });
         }
         
         @Override
@@ -399,37 +431,6 @@ public class TabSettings extends SettingsPanel {
                 editor.getSorter().setSortKeys(Arrays.asList(new SortKey[]{
                     new SortKey(1, SortOrder.ASCENDING),
                     new SortKey(0, SortOrder.ASCENDING)}));
-                editor.setValueFilter("[^0-9-]");
-                editor.setTableEditorListener(new TableEditor.TableEditorListener<SimpleTableEditor.MapItem<Long>>() {
-                    @Override
-                    public void itemAdded(SimpleTableEditor.MapItem<Long> item) {
-                        informChangeListener(editor.getSettingValue());
-                    }
-
-                    @Override
-                    public void itemRemoved(SimpleTableEditor.MapItem<Long> item) {
-                        informChangeListener(editor.getSettingValue());
-                    }
-
-                    @Override
-                    public void itemEdited(SimpleTableEditor.MapItem<Long> oldItem, SimpleTableEditor.MapItem<Long> newItem) {
-                        informChangeListener(editor.getSettingValue());
-                    }
-
-                    @Override
-                    public void allItemsChanged(List<SimpleTableEditor.MapItem<Long>> newItems) {
-                        informChangeListener(editor.getSettingValue());
-                    }
-
-                    @Override
-                    public void refreshData() {
-                    }
-
-                    @Override
-                    public void itemsSet() {
-                        informChangeListener(editor.getSettingValue());
-                    }
-                });
                 add(editor, gbc);
 
                 gbc = d.makeGbc(0, 2, 1, 1);
@@ -485,16 +486,23 @@ public class TabSettings extends SettingsPanel {
     
     public static String tabPosLabel(String value) {
         if (value.equals("-")) {
-            return "Info Tabs (-)";
+            return String.format("%s (-)",
+                    Language.getString("settings.tabsOrder.dialogs").replace(":", ""));
         }
         else if (value.equals("#")) {
-            return "Channel Tabs (#)";
+            return String.format("%s (#)",
+                    Language.getString("settings.tabsOrder.channel").replace(":", ""));
         }
         else if (value.equals("$")) {
-            return "Whisper Tabs ($)";
+            return String.format("%s ($)",
+                    Language.getString("settings.tabsOrder.whisper").replace(":", ""));
+        }
+        else if (value.equals("'")) {
+            return String.format("%s (')",
+                    Language.getString("settings.tabsOrder.customTabs").replace(":", ""));
         }
         else if (value.equals(Channels.DEFAULT_CHANNEL_ID)) {
-            return String.format("'%s' tab", Language.getString("tabs.noChannel"));
+            return String.format("\"%s\" tab", Language.getString("tabs.noChannel"));
         }
         return value;
     }

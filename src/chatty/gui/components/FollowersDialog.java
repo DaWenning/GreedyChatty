@@ -2,18 +2,20 @@
 package chatty.gui.components;
 
 import chatty.Chatty;
+import chatty.Chatty.PathType;
 import chatty.Helper;
 import chatty.User;
 import chatty.gui.DockedDialogHelper;
 import chatty.gui.DockedDialogManager;
 import chatty.gui.GuiUtil;
-import chatty.gui.LaF;
+import chatty.gui.laf.LaF;
 import chatty.gui.MainGui;
 import chatty.gui.components.menus.ContextMenu;
 import chatty.gui.components.menus.ContextMenuListener;
 import chatty.gui.components.menus.StreamsContextMenu;
 import chatty.gui.components.menus.UserContextMenu;
 import chatty.gui.components.settings.ListTableModel;
+import chatty.lang.Language;
 import chatty.util.DateTime;
 import chatty.util.Debugging;
 import chatty.util.StringUtil;
@@ -22,7 +24,6 @@ import chatty.util.api.FollowerInfo;
 import chatty.util.api.TwitchApi;
 import chatty.util.colors.ColorCorrectionNew;
 import chatty.util.dnd.DockContent;
-import chatty.util.dnd.DockContentContainer;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -40,7 +41,6 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -55,6 +55,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JTextArea;
 import javax.swing.Timer;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableCellRenderer;
@@ -95,6 +96,9 @@ public class FollowersDialog extends JDialog {
     private final JTable table;
     private final ListTableModel<Follower> followers = new MyListTableModel();
     private final JLabel loadInfo = new JLabel();
+    
+    private final JScrollPane accessInfo;
+    private final JScrollPane mainTable;
     
     private final TwitchApi api;
     private final MainGui main;
@@ -175,7 +179,18 @@ public class FollowersDialog extends JDialog {
         table.setIntercellSpacing(new Dimension(0, 0));
         table.setFont(table.getFont().deriveFont(Font.BOLD));
         table.setRowHeight(table.getFontMetrics(table.getFont()).getHeight()+2);
-        mainPanel.add(new JScrollPane(table), gbc);
+        mainTable = new JScrollPane(table);
+        mainPanel.add(mainTable, gbc);
+        
+        JTextArea accessInfoText = new JTextArea(
+                type == Type.FOLLOWERS
+                        ? Language.getString("followersDialog.accessInfo")
+                        : Language.getString("subscribersDialog.accessInfo"));
+        accessInfoText.setLineWrap(true);
+        accessInfoText.setWrapStyleWord(true);
+        accessInfoText.setEditable(false);
+        accessInfo = new JScrollPane(accessInfoText);
+        mainPanel.add(accessInfo, gbc);
         
         gbc = GuiUtil.makeGbc(0, 3, 2, 1, GridBagConstraints.WEST);
         gbc.insets = new Insets(2, 5, 5, 5);
@@ -282,6 +297,14 @@ public class FollowersDialog extends JDialog {
         setSize(300,400);
         
         GuiUtil.installEscapeCloseOperation(this);
+        
+        updateMain();
+    }
+    
+    private void updateMain() {
+        boolean showTable = currentInfo == null || currentInfo.total == 0 || currentInfo.hasFollowers();
+        mainTable.setVisible(showTable);
+        accessInfo.setVisible(!showTable);
     }
     
     @Override
@@ -473,6 +496,7 @@ public class FollowersDialog extends JDialog {
             loadInfo.setText("Loading..");
         }
         updateStats();
+        updateMain();
     }
     
     /**
@@ -482,6 +506,7 @@ public class FollowersDialog extends JDialog {
      */
     public void showDialog(String stream) {
         this.stream = stream;
+        helper.setCurrentChannel(stream);
         setTitle(type+" of "+stream+" (100 most recent)");
         if (currentInfo == null || !currentInfo.stream.equals(stream)) {
             // Set to default if no info is set yet or if it is opened on a
@@ -493,6 +518,7 @@ public class FollowersDialog extends JDialog {
             lastValidInfo = null;
             lastUpdated = -1;
             updateStats();
+            updateMain();
         }
         setVisible(true);
         request();
@@ -584,7 +610,7 @@ public class FollowersDialog extends JDialog {
     private void saveToFile(boolean onlyName) {
         FollowerInfo info = lastValidInfo;
         if (info != null) {
-            Path path = Paths.get(Chatty.getUserDataDirectory(),"exported");
+            Path path = Chatty.getPath(PathType.EXPORT);
             Path file = path.resolve(StringUtil.toLowerCase(type.toString())+".txt");
             try {
                 Files.createDirectories(path);

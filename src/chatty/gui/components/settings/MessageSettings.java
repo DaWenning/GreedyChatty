@@ -142,7 +142,7 @@ public class MessageSettings extends SettingsPanel {
         d.addStringSetting(setting, combo);
         
         JButton editTimestampButton = new JButton(Language.getString("dialog.button.customize"));
-        editTimestampButton.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
+        GuiUtil.smallButtonInsets(editTimestampButton);
         GuiUtil.matchHeight(editTimestampButton, combo);
         editTimestampButton.addActionListener(e -> {
             TimestampEditor editor = new TimestampEditor(d, d.getLinkLabelListener());
@@ -424,7 +424,7 @@ public class MessageSettings extends SettingsPanel {
                     if (uptimeDuration < 10*60*1000) {
                         startTimePicnic = startTime;
                     }
-                    StreamInfoHistoryItem item = new StreamInfoHistoryItem(testTime, 0, null, null, StreamInfo.StreamType.LIVE, null, startTime, startTimePicnic);
+                    StreamInfoHistoryItem item = new StreamInfoHistoryItem(testTime, 0, null, null, StreamInfo.StreamType.LIVE, startTime, startTimePicnic);
                     LinkedHashMap<Long, StreamInfoHistoryItem> history = new LinkedHashMap<>();
                     history.put(testTime, item);
                     info.setHistory(history);

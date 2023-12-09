@@ -2,6 +2,7 @@
 package chatty.gui.components.settings;
 
 import chatty.Chatty;
+import chatty.Chatty.PathType;
 import chatty.util.api.usericons.Usericon;
 import chatty.util.api.usericons.Usericon.Type;
 import chatty.gui.GuiUtil;
@@ -382,7 +383,7 @@ class UsericonEditor extends TableEditor<Usericon> {
                         dialog.setVisible(false);
                     }
                     else if (e.getSource() == openDir) {
-                        MiscUtil.openFolder(new File(Chatty.getImageDirectory()), dialog);
+                        MiscUtil.openFile(Chatty.getPathCreate(PathType.IMAGE).toFile(), dialog);
                     }
                     else if (e.getSource() == scanDir) {
                         scanFiles();
@@ -407,7 +408,7 @@ class UsericonEditor extends TableEditor<Usericon> {
                     + "folder:  "), gbc);
         
             gbc = GuiUtil.makeGbc(0, 1, 3, 1);
-            JTextField path = new JTextField(Chatty.getImageDirectory());
+            JTextField path = new JTextField(Chatty.getPath(PathType.IMAGE).toString());
             path.setEditable(false);
             path.setPreferredSize(new Dimension(0, path.getPreferredSize().height));
             gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -419,11 +420,11 @@ class UsericonEditor extends TableEditor<Usericon> {
             gbc.weightx = 1;
             panel.add(scanResult, gbc);
             
-            scanDir.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
+            GuiUtil.smallButtonInsets(scanDir);
             gbc = GuiUtil.makeGbc(1, 2, 1, 1);
             panel.add(scanDir, gbc);
             
-            openDir.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
+            GuiUtil.smallButtonInsets(openDir);
             gbc = GuiUtil.makeGbc(2, 2, 1, 1);
             panel.add(openDir, gbc);
 
@@ -488,7 +489,7 @@ class UsericonEditor extends TableEditor<Usericon> {
                     updateSize();
                 }
             });
-            sourceInfoButton.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
+            GuiUtil.smallButtonInsets(sourceInfoButton);
             gbc = GuiUtil.makeGbc(2, 7, 1, 1);
             panel.add(sourceInfoButton, gbc);
 
@@ -593,7 +594,7 @@ class UsericonEditor extends TableEditor<Usericon> {
         }
         
         private void scanFiles() {
-            File file = new File(Chatty.getImageDirectory());
+            File file = Chatty.getPath(PathType.IMAGE).toFile();
             File[] files = file.listFiles(new ImageFilenameFilter());
             String resultText = "";
             

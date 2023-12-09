@@ -2,8 +2,11 @@
 package chatty.util.api;
 
 import chatty.lang.Language;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -13,25 +16,95 @@ import java.util.Set;
  */
 public class TokenInfo {
     
+        
+    public enum ScopeCategory {
+        BASIC("basic",
+                Scope.CHAT_READ,
+                Scope.CHAT_EDIT,
+                Scope.WHISPER_READ,
+                Scope.WHISPER_EDIT,
+                Scope.WHISPER_MANAGE,
+                Scope.MANAGE_COLOR,
+                Scope.POINTS,
+                Scope.FOLLOWS
+        ),
+        MODERATION("moderation",
+                Scope.MANAGE_CHAT,
+                Scope.MANAGE_BANS,
+                Scope.MANAGE_MSGS,
+                Scope.CHAN_MOD,
+                Scope.AUTOMOD,
+                Scope.BLOCKED_READ,
+                Scope.BLOCKED_MANAGE,
+                Scope.ANNOUNCEMENTS,
+                Scope.MANAGE_SHIELD,
+                Scope.MANAGE_SHOUTOUTS,
+                Scope.CHANNEL_FOLLOWERS
+        ),
+        BROADCASTER("broadcaster",
+                Scope.MANAGE_MODS,
+                Scope.MANAGE_VIPS,
+                Scope.EDITOR,
+                Scope.EDIT_BROADCAST,
+                Scope.COMMERICALS,
+                Scope.SUBSCRIBERS,
+                Scope.MANAGE_RAIDS,
+                Scope.MANAGE_POLLS
+        );
+        
+        public List<Scope> scopes;
+        public String label;
+
+        private ScopeCategory(String langKey, Scope... scopes) {
+            this.scopes = Arrays.asList(scopes);
+            this.label = Language.getString("login.accessCategory."+langKey);
+        }
+        
+        public static List<Scope> getUncategorized() {
+            List<Scope> result = new ArrayList<>(Arrays.asList(Scope.values()));
+            result.removeIf(scope -> getCategory(scope) != null);
+            return result;
+        }
+        
+        public static ScopeCategory getCategory(Scope scope) {
+            for (ScopeCategory cat : values()) {
+                if (cat.scopes.contains(scope)) {
+                    return cat;
+                }
+            }
+            return null;
+        }
+        
+    }
+    
     public enum Scope {
-        CHAT("chat_login", "chat"),
         CHAT_READ("chat:read", "chatRead"),
         CHAT_EDIT("chat:edit", "chatWrite"),
         WHISPER_READ("whispers:read", "whisperRead"),
         WHISPER_EDIT("whispers:edit", "whisperWrite"),
-        USERINFO("user_read", "user"),
-        EDITOR("channel_editor", "editor"),
-        EDIT_BROADCAST("user:edit:broadcast", "broadcast"),
+        WHISPER_MANAGE("user:manage:whispers", "whisperManage"),
+        EDITOR("channel_editor", "editor"), // ?
+        EDIT_BROADCAST("channel:manage:broadcast", "broadcast"),
         COMMERICALS("channel_commercial", "commercials"),
-        FOLLOWS("user:read:follows", "follows"),
-        SUBSCRIBERS("channel_subscriptions", "subscribers"),
-        SUBSCRIPTIONS("user_subscriptions", "subscriptions"),
-        CHAN_MOD("channel:moderate", "chanMod"),
+        FOLLOWS("user:read:follows", "follows"), // Followed streams
+        CHANNEL_FOLLOWERS("moderator:read:followers", "viewFollowers"),
+        SUBSCRIBERS("channel:read:subscriptions", "subscribers"),
+        CHAN_MOD("channel:moderate", "chanMod"), // PubSub topics
         AUTOMOD("moderator:manage:automod", "automod"),
         BLOCKED_READ("moderator:read:blocked_terms", "blockedRead"),
         BLOCKED_MANAGE("moderator:manage:blocked_terms", "blockedManage"),
         POINTS("channel:read:redemptions", "points"),
-        ANNOUNCEMENTS("moderator:manage:announcements", "announcements");
+        ANNOUNCEMENTS("moderator:manage:announcements", "announcements"),
+        MANAGE_BANS("moderator:manage:banned_users", "manageBans"),
+        MANAGE_CHAT("moderator:manage:chat_settings", "manageChat"),
+        MANAGE_MODS("channel:manage:moderators", "manageMods"),
+        MANAGE_VIPS("channel:manage:vips", "manageVips"),
+        MANAGE_MSGS("moderator:manage:chat_messages", "manageMsgs"),
+        MANAGE_SHIELD("moderator:manage:shield_mode", "manageShield"),
+        MANAGE_COLOR("user:manage:chat_color", "manageColor"),
+        MANAGE_RAIDS("channel:manage:raids", "manageRaids"),
+        MANAGE_POLLS("channel:manage:polls", "managePolls"),
+        MANAGE_SHOUTOUTS("moderator:manage:shoutouts", "manageShoutouts");
         
         public String scope;
         public String label;
@@ -41,6 +114,15 @@ public class TokenInfo {
             this.scope = scope;
             this.label = Language.getString("login.access."+langKey);
             this.description = Language.getString("login.access."+langKey+".tip", false);
+        }
+        
+        public static Scope fromScopeString(String scopeString) {
+            for (Scope scope : values()) {
+                if (scope.scope.equals(scopeString)) {
+                    return scope;
+                }
+            }
+            return null;
         }
         
     }
@@ -79,8 +161,11 @@ public class TokenInfo {
     }
     
     public boolean hasChatAccess() {
-        return hasScope(Scope.CHAT)
-                || (hasScope(Scope.CHAT_READ) && hasScope(Scope.CHAT_EDIT));
+        return hasScope(Scope.CHAT_READ) && hasScope(Scope.CHAT_EDIT);
+    }
+    
+    public static void main(String[] args) {
+        System.out.println(ScopeCategory.getUncategorized());
     }
     
 }

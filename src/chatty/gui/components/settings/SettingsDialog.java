@@ -3,8 +3,8 @@ package chatty.gui.components.settings;
 
 import chatty.gui.GuiUtil;
 import chatty.util.colors.HtmlColors;
-import chatty.gui.LaF;
-import chatty.gui.LaF.LaFSettings;
+import chatty.gui.laf.LaF;
+import chatty.gui.laf.LaF.LaFSettings;
 import chatty.gui.MainGui;
 import chatty.gui.components.LinkLabel;
 import chatty.gui.components.LinkLabelListener;
@@ -105,7 +105,8 @@ public class SettingsDialog extends JDialog implements ActionListener {
             "logPath", "logTimestamp", "logSplit", "logSubdirectories",
             "logLockFiles", "logMessageTemplate",
             "laf", "lafTheme", "lafFontScale", "language", "timezone", "locale",
-            "userDialogMessageLimit"
+            "userDialogMessageLimit", "cachePath", "imgPath", "exportPath",
+            "webp"
     ));
     
     private final Set<String> reconnectRequiredDef = new HashSet<>(Arrays.asList(
@@ -148,10 +149,10 @@ public class SettingsDialog extends JDialog implements ActionListener {
         HIGHLIGHT("Highlight", Language.getString("settings.page.highlight")),
         IGNORE("Ignore", Language.getString("settings.page.ignore")),
         FILTER("Filter", Language.getString("settings.page.filter")),
+        CUSTOM_TABS("Custom Tabs", Language.getString("settings.page.customTabs")),
         HISTORY("History", Language.getString("settings.page.history")),
         NOTIFICATIONS("Notifications", Language.getString("settings.page.notifications")),
         LIVE_STREAMS("Live Streams", Language.getString("settings.page.liveStreams")),
-        SOUNDS("Sounds", Language.getString("settings.page.sound")),
         USERCOLORS("Usercolors", Language.getString("settings.page.usercolors")),
         LOGGING("Log to file", Language.getString("settings.page.logging")),
         WINDOW("Window", Language.getString("settings.page.window")),
@@ -209,13 +210,13 @@ public class SettingsDialog extends JDialog implements ActionListener {
             Page.HIGHLIGHT,
             Page.IGNORE,
             Page.FILTER,
+            Page.CUSTOM_TABS,
             Page.LOGGING,
         }));
         MENU.put(Page.WINDOW, Arrays.asList(new Page[]{
             Page.TABS,
             Page.NOTIFICATIONS,
-            Page.LIVE_STREAMS,
-            Page.SOUNDS,
+            Page.LIVE_STREAMS
         }));
         MENU.put(Page.OTHER, Arrays.asList(new Page[]{
             Page.COMMANDS,
@@ -302,9 +303,9 @@ public class SettingsDialog extends JDialog implements ActionListener {
         panels.put(Page.HIGHLIGHT, new HighlightSettings(this));
         panels.put(Page.IGNORE, new IgnoreSettings(this));
         panels.put(Page.FILTER, new FilterSettings(this));
+        panels.put(Page.CUSTOM_TABS, new RoutingSettings(this));
         panels.put(Page.MSGCOLORS, new MsgColorSettings(this));
         panels.put(Page.HISTORY, new HistorySettings(this));
-        panels.put(Page.SOUNDS, new SoundSettings(this));
         panels.put(Page.NOTIFICATIONS, new NotificationSettings(this, settings));
         panels.put(Page.LIVE_STREAMS, new LiveStreamsSettings(this));
         panels.put(Page.USERCOLORS, new UsercolorSettings(this));
@@ -355,7 +356,12 @@ public class SettingsDialog extends JDialog implements ActionListener {
 
             @Override
             public void linkClicked(String type, String ref) {
-                owner.openHelp("help-settings.html", currentlyShown.name);
+                if (currentlyShown == Page.COMMANDS) {
+                    owner.openHelp("help-custom_commands.html", "");
+                }
+                else {
+                    owner.openHelp("help-settings.html", currentlyShown.name);
+                }
             }
         }), gbc);
         
@@ -372,7 +378,7 @@ public class SettingsDialog extends JDialog implements ActionListener {
         searchLabel.setLabelFor(searchField);
         
         JButton resetSearchButton = new JButton(Language.getString("settings.resetSearch"));
-        resetSearchButton.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
+        GuiUtil.smallButtonInsets(resetSearchButton);
         resetSearchButton.addActionListener(e -> {
             searchField.setText("");
         });
@@ -397,7 +403,7 @@ public class SettingsDialog extends JDialog implements ActionListener {
         gbc.insets = new Insets(4,3,8,8);
         gbc.ipadx = 16;
         gbc.ipady = 4;
-        ok.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
+        GuiUtil.smallButtonInsets(ok);
         add(ok,gbc);
         cancel.setMnemonic(KeyEvent.VK_C);
         gbc = makeGbc(3,2,1,1);
@@ -405,13 +411,13 @@ public class SettingsDialog extends JDialog implements ActionListener {
         gbc.insets = new Insets(4,3,8,8);
         gbc.ipadx = 16;
         gbc.ipady = 4;
-        cancel.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
+        GuiUtil.smallButtonInsets(cancel);
         add(cancel,gbc);
         
         // Button Listeners
         ok.addActionListener(this);
         cancel.addActionListener(this);
-
+        
         pack();
     }
     
@@ -516,8 +522,21 @@ public class SettingsDialog extends JDialog implements ActionListener {
                 } else if (action.equals("selectMsgColor")) {
                     showPanel(Page.MSGCOLORS);
                     getPanel(MsgColorSettings.class).selectItem((String) parameter);
+                } else if (action.equals("selectRouting")) {
+                    showPanel(Page.CUSTOM_TABS);
+                    @SuppressWarnings("unchecked") // By convention
+                    Collection<String> data = (Collection<String>) parameter;
+                    getPanel(RoutingSettings.class).selectItems(data);
+                } else if (action.equals("selectNotification")) {
+                    showPanel(Page.NOTIFICATIONS);
+                    @SuppressWarnings("unchecked") // By convention
+                    long id = Long.parseLong((String) parameter);
+                    getPanel(NotificationSettings.class).selectItem(id);
                 } else if (action.equals("show")) {
                     showPage((String) parameter);
+                } else if (action.equals("editHotkey")) {
+                    showPanel(Page.HOTKEYS);
+                    getPanel(HotkeySettings.class).edit((String) parameter);
                 }
             }
         });
@@ -555,9 +574,12 @@ public class SettingsDialog extends JDialog implements ActionListener {
         getPanel(ImageSettings.class).setHiddenBadgesData(owner.getHiddenBadgesData());
         getPanel(ImageSettings.class).setTwitchBadgeTypes(owner.getTwitchBadgeTypes());
         getPanel(HotkeySettings.class).setData(owner.hotkeyManager.getActionsMap(),
-                owner.hotkeyManager.getData(), owner.hotkeyManager.globalHotkeysAvailable());
+                owner.hotkeyManager.getDescriptionsMap(),
+                owner.hotkeyManager.getData(),
+                owner.hotkeyManager.globalHotkeysAvailable());
         getPanel(NotificationSettings.class).setData(owner.getNotificationData());
         getPanel(EmoteSettings.class).setData(owner.localEmotes.getData());
+        getPanel(RoutingSettings.class).setData(owner.routingManager.getData());
     }
     
     public void updateBackgroundColor() {
@@ -635,6 +657,7 @@ public class SettingsDialog extends JDialog implements ActionListener {
         owner.hotkeyManager.setData(getPanel(HotkeySettings.class).getData());
         owner.setNotificationData(getPanel(NotificationSettings.class).getData());
         owner.localEmotes.setData(getPanel(EmoteSettings.class).getData());
+        owner.routingManager.setData(getPanel(RoutingSettings.class).getData());
         if (restartRequired) {
             JOptionPane.showMessageDialog(this, RESTART_REQUIRED_INFO, "Info", JOptionPane.INFORMATION_MESSAGE);
         }
@@ -939,6 +962,10 @@ public class SettingsDialog extends JDialog implements ActionListener {
     }
     
     protected ComboLongSetting addComboLongSetting(String name, int... choices) {
+        return addComboLongSetting(name, false, choices);
+    }
+    
+    protected ComboLongSetting addComboLongSetting(String name, boolean editable, int... choices) {
         Map<Long, String> localizedChoices = new LinkedHashMap<>();
         for (Integer choice : choices) {
             String label = Language.getString("settings.long."+name+".option."+choice, false);
@@ -948,6 +975,7 @@ public class SettingsDialog extends JDialog implements ActionListener {
             localizedChoices.put((long)choice, label);
         }
         ComboLongSetting result = new ComboLongSetting(localizedChoices);
+        result.setEditable(editable);
         result.setToolTipText(SettingsUtil.addTooltipLinebreaks(Language.getString("settings.long."+name+".tip", false)));
         longSettings.put(name, result);
         return result;
@@ -1001,8 +1029,10 @@ public class SettingsDialog extends JDialog implements ActionListener {
         return result;
     }
     
-    protected SimpleTableEditor<String> addStringMapSetting(String name, int width, int height) {
-        SimpleTableEditor<String> table = new SimpleTableEditor<String>(this, String.class) {
+    protected SimpleTableEditor<String> addStringMapSetting(String name,
+            int width, int height,
+            String keyLabel, String valueLabel) {
+        SimpleTableEditor<String> table = new SimpleTableEditor<String>(this, String.class, keyLabel, valueLabel) {
 
             @Override
             protected String valueFromString(String input) {
@@ -1014,8 +1044,10 @@ public class SettingsDialog extends JDialog implements ActionListener {
         return table;
     }
     
-    protected SimpleTableEditor<Long> addLongMapSetting(String name, int width, int height) {
-        SimpleTableEditor<Long> table = new SimpleTableEditor<Long>(this, Long.class) {
+    protected SimpleTableEditor<Long> addLongMapSetting(String name,
+            int width, int height,
+            String keyLabel, String valueLabel) {
+        SimpleTableEditor<Long> table = new SimpleTableEditor<Long>(this, Long.class, keyLabel, valueLabel) {
 
             @Override
             protected Long valueFromString(String input) {

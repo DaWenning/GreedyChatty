@@ -15,6 +15,7 @@ import chatty.gui.components.textpane.ChannelTextPane;
 import chatty.gui.components.textpane.InfoMessage;
 import chatty.gui.components.textpane.Message;
 import chatty.util.StringUtil;
+import chatty.util.api.pubsub.LowTrustUserMessageData;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.event.ActionEvent;
@@ -27,10 +28,8 @@ import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.KeyStroke;
-import javax.swing.SwingUtilities;
 import javax.swing.Timer;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
+import javax.swing.text.JTextComponent;
 
 /**
  * A single channel window, combining styled text pane, userlist and input box.
@@ -83,13 +82,6 @@ public final class Channel extends JPanel {
         //System.out.println(west.getVerticalScrollBarPolicy());
         //System.out.println(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         west.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
-        
-        // PageUp/Down hotkeys / Scrolling
-        InputMap westScrollInputMap = west.getInputMap(WHEN_IN_FOCUSED_WINDOW);
-        westScrollInputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_UP, 0), "pageUp");
-        west.getActionMap().put("pageUp", new ScrollAction("pageUp", west.getVerticalScrollBar()));
-        westScrollInputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_DOWN, 0), "pageDown");
-        west.getActionMap().put("pageDown", new ScrollAction("pageDown", west.getVerticalScrollBar()));
         west.getVerticalScrollBar().setUnitIncrement(40);
 
         
@@ -105,19 +97,37 @@ public final class Channel extends JPanel {
         mainPane.setDividerSize(DIVIDER_SIZE);
         
         // Text input
-        input = new ChannelEditBox(40);
+        input = new ChannelEditBox();
         input.addActionListener(main.getActionListener());
         input.setCompletionServer(new ChannelCompletion(this, main, input, users));
         input.setCompletionEnabled(main.getSettings().getBoolean("completionEnabled"));
-        // Remove PAGEUP/DOWN so it can scroll chat (as before JTextArea)
-        input.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_UP, 0), "-");
-        input.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_DOWN, 0), "-");
-        GuiUtil.installLengthLimitDocumentFilter(input, 500, false);
+        installLimits(input);
         TextSelectionMenu.install(input);
-
+        
         // Add components
         add(mainPane, BorderLayout.CENTER);
         add(input, BorderLayout.SOUTH);
+    }
+    
+    /**
+     * Create temporary input box for the $input() function.
+     * 
+     * @return 
+     */
+    public ChannelEditBox createInputBox() {
+        ChannelEditBox result = new ChannelEditBox();
+        result.setCompletionServer(new ChannelCompletion(this, main, result, users));
+        result.setCompletionEnabled(main.getSettings().getBoolean("completionEnabled"));
+        installLimits(result);
+        TextSelectionMenu.install(result);
+        return result;
+    }
+    
+    private static void installLimits(JTextComponent comp) {
+        GuiUtil.installLengthLimitDocumentFilter(comp, 500, false,
+                // Might not be all commands that can send messages, but should be fine
+                "^/(say|me|msg|msgreply|msgreplythread) ", 504,
+                "^/", 100*1000);
     }
     
     public DockChannelContainer getDockContent() {
@@ -286,7 +296,10 @@ public final class Channel extends JPanel {
     public void printMessage(Message message) {
         text.printMessage(message);
     }
-    
+
+    public void printLowTrustInfo(User user, LowTrustUserMessageData data) {
+        text.printLowTrustInfo(user, data);
+    }
     
     // Style
     
@@ -327,28 +340,24 @@ public final class Channel extends JPanel {
         input.insertAtCaret(text, withSpace);
     }
     
-    private static class ScrollAction extends AbstractAction {
-        
-        private final String action;
-        private final JScrollBar scrollbar;
-        
-        ScrollAction(String action, JScrollBar scrollbar) {
-            this.scrollbar = scrollbar;
-            this.action = action;
+    public void scroll(String action) {
+        scroll(west.getVerticalScrollBar(), action);
+    }
+    
+    public static void scroll(JScrollBar scrollbar, String action) {
+        int now = scrollbar.getValue();
+        int height = scrollbar.getVisibleAmount();
+        height = height - height / 10;
+        int newValue = 0;
+        switch (action) {
+            case "pageUp":
+                newValue = now - height;
+                break;
+            case "pageDown":
+                newValue = now + height;
+                break;
         }
-        
-        @Override
-        public void actionPerformed(ActionEvent e) {
-            int now = scrollbar.getValue();
-            int height = scrollbar.getVisibleAmount();
-            height = height - height / 10;
-            int newValue = 0;
-            switch (action) {
-                case "pageUp": newValue = now - height; break;
-                case "pageDown": newValue = now + height; break;
-            }
-            scrollbar.setValue(newValue);
-        }
+        scrollbar.setValue(newValue);
     }
     
     public final void setUserlistWidth(int width, int minWidth) {
@@ -391,6 +400,19 @@ public final class Channel extends JPanel {
      */
     public final void toggleInput() {
         input.setVisible(!input.isVisible());
+        revalidate();
+    }
+    
+    private boolean inputPreviouslyShown = true;
+    
+    public final void hideInput() {
+        inputPreviouslyShown = input.isVisible();
+        input.setVisible(false);
+        revalidate();
+    }
+    
+    public final void restoreInput() {
+        input.setVisible(inputPreviouslyShown);
         revalidate();
     }
     

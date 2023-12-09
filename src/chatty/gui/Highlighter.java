@@ -143,7 +143,7 @@ public class Highlighter {
             usernameItem = null;
         }
         else {
-            HighlightItem newItem = new HighlightItem("w:"+username);
+            HighlightItem newItem = new HighlightItem("w:"+username, "noPresetsUsernameHighlight");
             if (!newItem.hasError()) {
                 usernameItem = newItem;
             } else {
@@ -589,6 +589,8 @@ public class Highlighter {
         private Color backgroundColor;
         private boolean noNotification;
         private boolean noSound;
+        private boolean hide;
+        private boolean noLog;
         
         /**
          * Replacement string for filtering parts of a message
@@ -611,6 +613,8 @@ public class Highlighter {
          * 2 - Always enabled
          */
         private int substitutesEnabled = 1;
+        
+        private List<String> routingTargets;
         
         //--------------------------
         // Debugging
@@ -710,7 +714,7 @@ public class Highlighter {
             this.applyPresets = type == null || !type.isEmpty();
             
             Map<String, CustomCommand> presets = getPresets();
-            if (presets != null && type != null && applyPresets) {
+            if (presets != null && type != null && !type.startsWith("noPresets") && applyPresets) {
                 CustomCommand ccf = presets.get("_global_"+type);
                 ccf = ccf != null ? ccf : presets.get("_global");
                 if (ccf != null) {
@@ -905,6 +909,12 @@ public class Highlighter {
                         else if (part.equals("!notify")) {
                             noNotification = true;
                         }
+                        else if (part.equals("hide")) {
+                            hide = true;
+                        }
+                        else if (part.equals("!log")) {
+                            noLog = true;
+                        }
                         else if (part.equals("block")) {
                             blacklistBlock = true;
                         }
@@ -929,6 +939,16 @@ public class Highlighter {
                         else if (part.equals("firstmsg")) {
                             addUserItem("First Message of User", null, user -> {
                                 return user.getNumberOfMessages() == 0;
+                            });
+                        }
+                        else if (part.equals("restricted")) {
+                            addTagsItem("Restricted Message", null, tags -> {
+                                return tags.isRestrictedMessage();
+                            });
+                        }
+                        else if (part.equals("hypechat")) {
+                            addTagsItem("Hype Chat", null, tags -> {
+                                return tags.getHypeChatAmountText() != null;
                             });
                         }
                         else if (part.startsWith("repeatedmsg")) {
@@ -1003,19 +1023,26 @@ public class Highlighter {
                         }
                     }
                 }
-                else if (item.startsWith("if:")) {
-                    List<String> list = parseStringListPrefix(item, "if:", s -> s);
+                else if (item.startsWith("if:") || item.startsWith("!if:")) {
+                    boolean successValue = item.startsWith("if:");
+                    List<String> list;
+                    if (successValue) {
+                        list = parseStringListPrefix(item, "if:", s -> s);
+                    }
+                    else {
+                        list = parseStringListPrefix(item, "!if:", s -> s);
+                    }
                     List<HighlightItem> items = createHighlightItems(list);
                     if (!items.isEmpty()) {
-                        matchItems.add(new Item("If one matches", "\n====\n"+StringUtil.join(items, "----\n", s -> ((HighlightItem) s).getMatchInfo())+"====", true) {
+                        matchItems.add(new Item(successValue ? "If one matches" : "If none matches", "\n====\n"+StringUtil.join(items, "----\n", s -> ((HighlightItem) s).getMatchInfo())+"====", true) {
                             @Override
                             public boolean matches(Type type, String text, int msgStart, int msgEnd, Blacklist blacklist, String channel, Addressbook ab, User user, User localUser, MsgTags tags) {
                                 for (HighlightItem item : items) {
                                     if (item.matches(type, text, msgStart, msgEnd, blacklist, channel, ab, user, localUser, tags)) {
-                                        return true;
+                                        return successValue;
                                     }
                                 }
-                                return false;
+                                return !successValue;
                             }
                         });
                     }
@@ -1089,6 +1116,9 @@ public class Highlighter {
                     String newItem = StringUtil.append(result, " ", remaining);
                     modifications.add(new Modification(item, newItem, "preset:"));
                     prepare(newItem);
+                }
+                else if (item.startsWith("to:")) {
+                    routingTargets = parseStringListPrefix(item, "to:", c -> c);
                 }
                 else if (item.startsWith("n:")) {
                     parsePrefix(item, "n:");
@@ -1789,6 +1819,10 @@ public class Highlighter {
                     addPatternWarning(result, item.pattern);
                 }
             }
+            if (routingTargets != null) {
+                result.append("Copy message to: ").append(routingTargets);
+                result.append("\n");
+            }
             return result.toString();
         }
         
@@ -1916,6 +1950,14 @@ public class Highlighter {
                     ab = user.getAddressbook();
                 }
             }
+            if (localUser != null) {
+                if (channel == null) {
+                    channel = localUser.getChannel();
+                }
+                if (ab == null) {
+                    ab = localUser.getAddressbook();
+                }
+            }
             if (tags == null) {
                 tags = MsgTags.EMPTY;
             }
@@ -2031,6 +2073,18 @@ public class Highlighter {
             return noSound;
         }
         
+        public boolean hide() {
+            return hide;
+        }
+        
+        public boolean noLog() {
+            return noLog;
+        }
+        
+        public List<String> getRoutingTargets() {
+            return routingTargets;
+        }
+        
         public String getFailedReason() {
             if (failedItem != null) {
                 return failedItem.toString();
@@ -2072,6 +2126,10 @@ public class Highlighter {
         
         public String getReplacement() {
             return replacement;
+        }
+        
+        public String getUsedForFeature() {
+            return usedForFeature;
         }
         
         public static Map<String, CustomCommand> makePresets(Collection<String> input) {

@@ -1,7 +1,7 @@
 
-package chatty.gui;
+package chatty.gui.laf;
 
-import chatty.gui.LaFCustomDefaults.UIResourceMatteBorder;
+import chatty.gui.laf.LaFCustomDefaults.UIResourceMatteBorder;
 import chatty.gui.components.settings.SettingsDialog;
 import chatty.util.StringUtil;
 import chatty.util.colors.ColorCorrectionNew;
@@ -15,12 +15,14 @@ import com.jtattoo.plaf.luna.LunaLookAndFeel;
 import com.jtattoo.plaf.mint.MintLookAndFeel;
 import com.jtattoo.plaf.noire.NoireLookAndFeel;
 import java.awt.Color;
+import java.awt.Component;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.logging.Logger;
+import javax.swing.LookAndFeel;
 import javax.swing.UIManager;
 import javax.swing.UIManager.LookAndFeelInfo;
 import javax.swing.border.Border;
@@ -43,6 +45,7 @@ public class LaF {
     private static Color tabForegroundUnread = new Color(200,0,0);
     private static Color tabForegroundHighlight = new Color(255,80,0);
     private static Border inputBorder;
+    private static boolean defaultButtonInsets = false;
     
     public static String getLinkColor() {
         return linkColor;
@@ -64,11 +67,16 @@ public class LaF {
         return inputBorder;
     }
     
+    public static boolean defaultButtonInsets() {
+        return defaultButtonInsets;
+    }
+    
     public static boolean shouldUpdate(String settingName) {
         List<String> settingNames = Arrays.asList(new String[]{
             "laf", "lafTheme", "lafScroll", "lafForeground", "lafBackground",
             "lafStyle", "lafCustomTheme", "lafGradient", "lafVariant",
-            "lafNativeWindow"});
+            "lafNativeWindow", "lafFlatProperties", "lafFlatStyledWindow",
+            "lafFlatEmbeddedMenu", "lafFlatTabs", "lafErrorSound"});
         return settingNames.contains(settingName);
     }
     
@@ -85,11 +93,17 @@ public class LaF {
         public final String scroll;
         public final int variant;
         public final boolean nativeWindow;
+        public final boolean flatStyledWindow;
+        public final boolean flatEmbeddedMenu;
+        public final String flatProperties;
+        public final long flatTabs;
+        public final boolean errorSound;
         
         public LaFSettings(String lafCode, String theme, int fontScale,
                            Map<String, String> custom, Color fg, Color bg,
                            String style, int gradient, String scroll, int variant,
-                           boolean nativeWindow) {
+                           boolean nativeWindow, boolean styledWindow, boolean embeddedMenu,
+                           String flatProperties, long flatSelectedTab, boolean errorSound) {
             this.lafCode = lafCode;
             this.theme = theme;
             this.fontScale = fontScale;
@@ -101,21 +115,29 @@ public class LaF {
             this.scroll = scroll;
             this.variant = variant;
             this.nativeWindow = nativeWindow;
+            this.flatStyledWindow = styledWindow;
+            this.flatEmbeddedMenu = embeddedMenu;
+            this.flatProperties = flatProperties;
+            this.flatTabs = flatSelectedTab;
+            this.errorSound = errorSound;
         }
         
         public static LaFSettings fromSettings(Settings settings) {
-            String lafCode = settings.getString("laf");
-            String lafTheme = settings.getString("lafTheme");
-            int lafFontScale = (int)settings.getLong("lafFontScale");
-            Color bg = HtmlColors.decode(settings.getString("lafBackground"), Color.BLACK);
-            Color fg = HtmlColors.decode(settings.getString("lafForeground"), Color.WHITE);
-            String style = settings.getString("lafStyle");
-            int gradient = (int)(settings.getLong("lafGradient"));
-            int variant = (int)(settings.getLong("lafVariant"));
-            String scroll = settings.getString("lafScroll");
-            Map<String, String> custom = settings.getMap("lafCustomTheme");
-            boolean nativeWindow = settings.getBoolean("lafNativeWindow");
-            return new LaFSettings(lafCode, lafTheme, lafFontScale, custom, fg, bg, style, gradient, scroll, variant, nativeWindow);
+            return new LaFSettings(
+                    settings.getString("laf"),
+                    settings.getString("lafTheme"),
+                    (int) settings.getLong("lafFontScale"),
+                    settings.getMap("lafCustomTheme"),
+                    HtmlColors.decode(settings.getString("lafForeground"), Color.WHITE),
+                    HtmlColors.decode(settings.getString("lafBackground"), Color.BLACK),
+                    settings.getString("lafStyle"), (int) (settings.getLong("lafGradient")),
+                    settings.getString("lafScroll"), (int) (settings.getLong("lafVariant")),
+                    settings.getBoolean("lafNativeWindow"),
+                    settings.getBoolean("lafFlatStyledWindow"),
+                    settings.getBoolean("lafFlatEmbeddedMenu"),
+                    settings.getString("lafFlatProperties"),
+                    settings.getLong("lafFlatTabs"),
+                    settings.getBoolean("lafErrorSound"));
         }
         
         public static LaFSettings fromSettingsDialog(SettingsDialog d, Settings settings) {
@@ -130,7 +152,12 @@ public class LaF {
             String scroll = d.getStringSetting("lafScroll");
             Map<String, String> custom = settings.getMap("lafCustomTheme");
             boolean nativeWindow = d.getBooleanSettingValue("lafNativeWindow");
-            return new LaFSettings(lafCode, lafTheme, lafFontScale, custom, fg, bg, style, gradient, scroll, variant, nativeWindow);
+            return new LaFSettings(lafCode, lafTheme, lafFontScale, custom, fg, bg, style, gradient, scroll, variant, nativeWindow,
+                d.getBooleanSettingValue("lafFlatStyledWindow"),
+                d.getBooleanSettingValue("lafFlatEmbeddedMenu"),
+                d.getStringSetting("lafFlatProperties"),
+                d.getLongSetting("lafFlatTabs"),
+                d.getBooleanSettingValue("lafErrorSound"));
         }
         
     }
@@ -143,6 +170,7 @@ public class LaF {
         String theme = settings.theme;
         try {
             String laf = null;
+            LookAndFeel lafInstance = null;
             if (lafCode.startsWith(":")) {
                 laf = lafCode.substring(1);
             } else {
@@ -223,15 +251,41 @@ public class LaF {
                             }
                         }
                         break;
+                    case "flatdark":
+                        FlatLafUtil.loadFlatLaf("dark", settings);
+                        laf = null;
+                        defaultButtonInsets = true;
+                        break;
+                    case "flatlight":
+                        FlatLafUtil.loadFlatLaf("light", settings);
+                        laf = null;
+                        defaultButtonInsets = true;
+                        break;
                     default:
                         laf = UIManager.getCrossPlatformLookAndFeelClassName();
+                        if (!settings.errorSound) {
+                            lafInstance = new javax.swing.plaf.metal.MetalLookAndFeel() {
+
+                                @Override
+                                public void provideErrorFeedback(Component component) {
+                                        // Empty
+                                }
+
+                            };
+                        }
                         MetalLookAndFeel.setCurrentTheme(new OceanTheme());
                 }
             }
             
             LOGGER.info("[LAF] Set " + lafCode + "/" + theme + " [" + laf + "]");
-            UIManager.setLookAndFeel(laf);
-            lafClass = laf;
+            if (lafInstance != null) {
+                UIManager.setLookAndFeel(lafInstance);
+                lafClass = laf;
+            }
+            else if (laf != null) {
+                UIManager.setLookAndFeel(laf);
+                lafClass = laf;
+            }
             modifyDefaults();
         } catch (Exception ex) {
             LOGGER.warning("[LAF] Failed setting LAF: "+ex);
@@ -263,12 +317,13 @@ public class LaF {
         //--------------------------
         // Tab rows not overlaying eachother
         LaFUtil.putDefault("TabbedPane.tabRunOverlay", 0);
+        LaFUtil.putDefault("TabbedPane.rotateTabRuns", false);
         
         //--------------------------
         // Special font override
         //--------------------------
         try {
-            if (lafClass.equals(UIManager.getSystemLookAndFeelClassName())) {
+            if (lafClass != null && lafClass.equals(UIManager.getSystemLookAndFeelClassName())) {
                 Object font = UIManager.getLookAndFeelDefaults().get("TextField.font");
                 UIManager.getLookAndFeelDefaults().put("TextArea.font", font);
                 UIManager.getDefaults().put("TextArea.font", font);
@@ -371,6 +426,7 @@ public class LaF {
         if (settings.nativeWindow) {
             properties.put("windowDecoration", "off");
         }
+        properties.put("provideErrorFeedback", settings.errorSound ? "on" : "off");
         return properties;
     }
     

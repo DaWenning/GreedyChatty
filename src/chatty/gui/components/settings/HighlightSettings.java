@@ -39,7 +39,7 @@ import static javax.swing.WindowConstants.HIDE_ON_CLOSE;
  */
 public class HighlightSettings extends SettingsPanel {
     
-    public static final String INFO_HEADER = "<html><body style='width:350px;font-weight:normal;'>";
+    public static final String INFO_HEADER = "<html><body style='width:370px;font-weight:normal;'>";
     
     public static String getMatchingHelp(String type) {
         return INFO_HEADER+SettingsUtil.getInfo("info-matching.html", type);
@@ -138,7 +138,7 @@ public class HighlightSettings extends SettingsPanel {
         base.add(items, gbc);
         
         JButton noHighlightUsersButton = new JButton("Users to never highlight");
-        noHighlightUsersButton.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
+        GuiUtil.smallButtonInsets(noHighlightUsersButton);
         noHighlightUsersButton.addActionListener(e -> {
             noHighlightUsers.show(HighlightSettings.this);
         });
@@ -148,7 +148,7 @@ public class HighlightSettings extends SettingsPanel {
         base.add(noHighlightUsersButton, gbc);
         
         JButton highlightBlacklistButton = new JButton("Highlight Blacklist");
-        highlightBlacklistButton.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
+        GuiUtil.smallButtonInsets(highlightBlacklistButton);
         highlightBlacklistButton.addActionListener(e -> {
             highlightBlacklist.show(HighlightSettings.this);
         });
@@ -272,6 +272,9 @@ public class HighlightSettings extends SettingsPanel {
             this.d = d;
             substitutesEnabled = d.addSimpleBooleanSetting("matchingSubstitutesEnabled");
             substitutes = d.addListSetting("matchingSubstitutes", "Substitutes", 180, 250, true, true);
+            substitutes.setChangeListener(value -> {
+                updateTestSubstitutes();
+            });
         }
         
         public JDialog createDialog() {
@@ -300,7 +303,7 @@ public class HighlightSettings extends SettingsPanel {
                 add(new JLabel("<html><body style='width:340px;padding:4px;padding-top:0'>Independent of this setting the <code>config:s</code> prefix can enable and <code>config:!s</code> disable this feature on a per Highlight-item basis."), gbc);
 
                 JButton addDefaults = new JButton("Add default entries");
-                addDefaults.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
+                GuiUtil.smallButtonInsets(addDefaults);
                 addDefaults.addActionListener(e -> {
                     int result = JOptionPane.showConfirmDialog(rootPane, "This will add 26 (a-z) lookalikes entries. Existing entries will remain.", "Add entries?", JOptionPane.YES_NO_OPTION);
                     if (result == 0) {
@@ -317,9 +320,6 @@ public class HighlightSettings extends SettingsPanel {
                 gbc.weightx = 1;
                 gbc.weighty = 1;
                 substitutes.setEditor(() -> new SubstitutesEditor(this));
-                substitutes.setChangeListener(value -> {
-                    updateTestSubstitutes();
-                });
                 add(substitutes, gbc);
 
                 JButton closeButton = new JButton(Language.getString("dialog.button.close"));

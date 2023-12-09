@@ -1,7 +1,9 @@
 
 package chatty;
 
+import chatty.Chatty.PathType;
 import chatty.util.RingBuffer;
+import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -9,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.text.MessageFormat;
 import java.util.Date;
+import java.util.LinkedList;
 import java.util.logging.*;
 
 /**
@@ -19,16 +22,13 @@ public class Logging {
     
     public static final Level USERINFO = new UserinfoLevel();
     
-    private static final String LOG_FILE = Chatty.getDebugLogDirectory()+"debug%g.log";
-    private static final String LOG_FILE_SESSION = Chatty.getDebugLogDirectory()+"debug_session.log";
-    private static final String LOG_FILE_IRC = Chatty.getDebugLogDirectory()+"debug_irc%g.log";
+    private static final String LOG_FILE = Chatty.getPath(PathType.DEBUG).toString()+File.separator+"debug%g.log";
+    private static final String LOG_FILE_IRC = Chatty.getPath(PathType.DEBUG).toString()+File.separator+"debug_irc%g.log";
     
     /**
      * Maximum log file size in bytes.
      */
     private static final int MAX_LOG_SIZE = 1024*1024*2;
-    
-    private static final int MAX_SESSION_LOG_SIZE = 1024*1024*20;
     
     /**
      * How many log files to rotate through when the file reaches maximum size.
@@ -66,12 +66,6 @@ public class Logging {
             file.setLevel(Level.INFO);
             file.setFilter(new FileFilter());
             Logger.getLogger("").addHandler(file);
-            
-            FileHandler fileSession = new FileHandler(LOG_FILE_SESSION, MAX_SESSION_LOG_SIZE, 1);
-            fileSession.setFormatter(new TextFormatter());
-            fileSession.setLevel(Level.INFO);
-            fileSession.setFilter(new FileFilter());
-            Logger.getLogger("").addHandler(fileSession);
         } catch (IOException | SecurityException ex) {
             fileWarning(ex);
         }
@@ -90,10 +84,15 @@ public class Logging {
                     if (record.getMessage().startsWith("[PubSub]")) {
                         client.debugPubSub(record.getMessage());
                     }
+                    if (record.getMessage().startsWith("[EventSub]")
+                            || record.getMessage().contains("https://api.twitch.tv/helix/eventsub/subscriptions")) {
+                        client.debugEventSub(record.getMessage());
+                    }
                 }
                 if (record.getLevel() == Level.SEVERE) {
                     if (client.g != null) {
-                        client.g.error(record, lastMessages.getItems());
+                        boolean compact = record.getMessage().startsWith("FlatLaf: Failed to parse:");
+                        client.g.error(record, compact ? new LinkedList<>() : lastMessages.getItems());
                     }
                 } else if (record.getLevel() == USERINFO) {
                     client.warning(record.getMessage());
@@ -217,7 +216,7 @@ public class Logging {
     
     public static void createLogDir() {
         try {
-            Files.createDirectories(Paths.get(Chatty.getDebugLogDirectory()));
+            Files.createDirectories(Chatty.getPath(PathType.DEBUG));
         } catch (IOException ex) {
             fileWarning(ex);
         }
@@ -226,7 +225,7 @@ public class Logging {
     private static void fileWarning(Throwable ex) {
         if (client != null) {
             client.warning(String.format("Failed creating log files. Check that %s can be written to. (%s)",
-                    Chatty.getDebugLogDirectory(),
+                    Chatty.getPath(PathType.DEBUG),
                     ex));
         }
     }
