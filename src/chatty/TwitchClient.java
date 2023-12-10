@@ -1787,14 +1787,12 @@ public class TwitchClient {
             }
             testCommands(room, actualCommand, actualParamter);
         }
-        
         //--------------------
         // Only for testing
-        else if (Chatty.DEBUG || settings.getBoolean("debugCommands")) {
+        else if (Chatty.DEBUG) {
             testCommands(room, command, parameter);
         }
         //----------------------
-
         /* GREEDY CHATTY CUSTOM COMMANDS */
         else if (command.equals("readspelling")) {
             Chatty.getSpellChecker().readSpellingFile();
@@ -1806,7 +1804,7 @@ public class TwitchClient {
             g.printLine("spelling File has been reloaded and global spelling has been fetched");
         }
         else if (command.equals("openspelling")) {
-            MiscUtil.openFolder(new File(Chatty.getWorkingDirectory()), g);
+            MiscUtil.openFolder(new File(String.valueOf(Chatty.getWorkingDirectory())), g);
         }
         /* END GREEDY CHATTY CUSTOM COMMANDS */
         
@@ -3433,11 +3431,6 @@ public class TwitchClient {
                 pubsub.listenPoints(user.getStream(), settings.getString("token"));
             }
         }
-
-        private void checkPredictionListen(User user){
-            pubsub.listenPredictions(user.getStream(), settings.getString("token"));
-        }
-
         
         private void checkEventSubListen(User user) {
             // Is user the local user (can be on any channel though)

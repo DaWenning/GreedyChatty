@@ -896,8 +896,6 @@ public class MainGui extends JFrame implements Runnable {
                 TransparencyManager.toggleTransparent();
             }
         });
-        
-        hotkeyManager.registerAction("notification.closeAll", "Close all shown/queued notifications", new AbstractAction() {
 
         hotkeyManager.registerAction("notification.closeAll", "Close all shown/queued notifications",
                 new AbstractAction() {

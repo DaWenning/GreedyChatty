@@ -3,6 +3,8 @@ package chatty.util;
 
 import chatty.Chatty;
 import chatty.Chatty.PathType;
+import chatty.gui.MainGui;
+
 import java.awt.Component;
 import java.awt.Desktop;
 import java.awt.Graphics;
@@ -357,5 +359,7 @@ public class MiscUtil {
     public static boolean isNumTrue(Object object) {
         return object instanceof Number && ((Number) object).intValue() == 1;
     }
-    
+
+    public static void openFolder(File file, MainGui g) {
+    }
 }

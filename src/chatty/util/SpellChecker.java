@@ -92,7 +92,7 @@ public class SpellChecker {
         String line;
 
         try {
-            url = new URL("https://recklessGreed.de/twitch/spelling");
+            url = new URL("https://greedtech.live/spelling");
             is = url.openStream();  // throws an IOException
             br = new BufferedReader(new InputStreamReader(is));
 

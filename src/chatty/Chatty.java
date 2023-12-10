@@ -10,6 +10,8 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Supplier;
+
+import chatty.util.settings.Settings;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 
@@ -238,11 +240,11 @@ public class Chatty {
         
     }
     
-    private static Path getUserDataDirectory() {
+    public static Path getUserDataDirectory() {
         return paths.getPath(PathType.SETTINGS);
     }
     
-    private static Path getWorkingDirectory() {
+    static Path getWorkingDirectory() {
         return paths.getPath(PathType.WORKING);
     }
     

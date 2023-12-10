@@ -187,12 +187,6 @@ public class Manager {
     }
 
 
-    public void listenPredictions(String username, String token) {
-        this.token = token;
-        addTopic(new Predictions(username));
-    }
-
-    public void unlistenPredictions(String username) { removeTopic(new Predictions(username));}
     /**
      * Adds the given topic to be requested. If the topic is already being
      * listened to, it will still be added, processed and tried to listen to
