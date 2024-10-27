@@ -32,6 +32,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.json.simple.JSONObject;
 import chatty.util.api.ResultManager.CategoryResult;
+import chatty.util.api.ResultManager.CreateClipResult;
 import chatty.util.api.ResultManager.ShieldModeResult;
 import chatty.util.api.TokenInfo.Scope;
 import chatty.util.api.TwitchApi.SimpleRequestResult;
@@ -468,6 +469,46 @@ public class Requests {
         });
     }
     
+    public void createClip(String userId) {
+        String url = makeUrl("https://api.twitch.tv/helix/clips",
+                             "broadcaster_id", userId);
+        newApi.add(url, "POST", api.defaultToken, r -> {
+            String error = null;
+            if (r.responseCode == 202) {
+                String editUrl = Parsing.getClipUrl(r.text);
+                if (editUrl != null) {
+                    String viewUrl = editUrl.replace("/edit", "");
+                    api.resultManager.inform(ResultManager.Type.CREATE_CLIP,
+                                             (CreateClipResult l) -> {
+                                                 l.result(editUrl, viewUrl, null);
+                                             });
+                }
+                else {
+                    error = "Error creating clip";
+                }
+            }
+            else if (r.responseCode == 401) {
+                error = "Creating clip failed: Check access under 'Main - Account'";
+            }
+            else {
+                String errorMsg = getErrorMessage(r.text);
+                if (errorMsg != null) {
+                    error = errorMsg;
+                }
+                else {
+                    error = "Creating clip failed";
+                }
+            }
+            if (error != null) {
+                String error2 = error;
+                api.resultManager.inform(ResultManager.Type.CREATE_CLIP,
+                                         (CreateClipResult l) -> {
+                                             l.result(null, null, error2);
+                                         });
+            }
+        });
+    }
+    
     public void sendAnnouncement(String streamId, String message, String color) {
         String url = String.format("https://api.twitch.tv/helix/chat/announcements?broadcaster_id=%s&moderator_id=%s",
                 streamId, api.localUserId);
@@ -540,6 +581,20 @@ public class Requests {
                 "moderator_id", api.localUserId,
                 "to_broadcaster_id", targetId);
         newApi.add(url, "POST", api.defaultToken, r -> {
+            handleResult(r, listener);
+        });
+    }
+    
+    public void warn(String streamId, String targetId, String reason, SimpleRequestResultListener listener) {
+        String url = makeUrl("https://api.twitch.tv/helix/moderation/warnings",
+                "broadcaster_id", streamId,
+                "moderator_id", api.localUserId);
+        JSONObject data = new JSONObject();
+        data.put("user_id", targetId);
+        data.put("reason", reason);
+        JSONObject json = new JSONObject();
+        json.put("data", data);
+        newApi.add(url, "POST", json.toJSONString(), api.defaultToken, r -> {
             handleResult(r, listener);
         });
     }

@@ -6,6 +6,7 @@ import chatty.gui.MainGui;
 import chatty.gui.UrlOpener;
 import chatty.lang.Language;
 import chatty.util.DateTime;
+import chatty.util.RecentlyAffectedUsers;
 import chatty.util.StringUtil;
 import chatty.util.api.TwitchApi;
 import chatty.util.api.TwitchApi.SimpleRequestResultListener;
@@ -58,7 +59,7 @@ public class TwitchCommands {
     private static final Set<String> OTHER_COMMANDS = new HashSet<>(Arrays.asList(new String[]{
     }));
     
-    private TwitchConnection c;
+    private final TwitchConnection c;
     
     public TwitchCommands(TwitchConnection c) {
         this.c = c;
@@ -164,6 +165,13 @@ public class TwitchCommands {
                 api.shoutout(user, resultListener);
             }, "");
         });
+        commands.add("warn", "<user> <reason>", p -> {
+            Commands.CommandParsedArgs args = p.parsedArgs(2, 2);
+            String reason = args != null ? args.get(1, "") : "";
+            userCommand(client, p, args, (user, resultListener) -> {
+                api.warn(user, reason, resultListener);
+            }, StringUtil.aEmptyb(reason, "", " (%s)"));
+        });
         //--------------------------
         // Broadcaster
         //--------------------------
@@ -241,7 +249,7 @@ public class TwitchCommands {
                         TwitchApi.CHAT_SETTINGS_FOLLOWER_MODE, true);
             }
             else {
-                updateChatSettings(client, p, " ("+formatDuration(minutes / 60)+")",
+                updateChatSettings(client, p, " ("+formatDuration(minutes * 60)+")",
                         TwitchApi.CHAT_SETTINGS_FOLLOWER_MODE, true,
                         TwitchApi.CHAT_SETTINGS_FOLLOWER_MODE_DURATION, minutes);
             }
@@ -392,6 +400,7 @@ public class TwitchCommands {
             if (r.error == null) {
                 // Success
                 client.g.addToLine(p.getRoom(), objectId, "OK");
+                RecentlyAffectedUsers.addUser(user);
             }
             else {
                 // Failed

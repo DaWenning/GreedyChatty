@@ -1026,6 +1026,39 @@
             updated on channel join and when sending a message, so e.g. if you
             get modded while already in the channel it will not be recognized
             until after you have sent a message.</li>
+        <li><code>msgs:</code> / <code>!msgs:</code> matches on the
+            past messages of the user as they are shown in the User Dialog,
+            not including the message that triggered this Highlight checking.<br />
+            The value is a list of one or several Highlight items, which will be
+            used to match against the text of the user's past messages (only one
+            item has to match, to require several items to match use separate
+            <code>msgs:</code> prefixes).<br />
+            For example <code>msgs:"mlimit:1 start:!v","!vote"</code> checks if
+            the latest message begins with "!v" or any message contains "!vote".
+            The usual text matching related prefixes can be used, as well as
+            these additional prefixes:<br />
+            <ul>
+                <li><code>mlimit:</code> limits how many messages are checked
+                    (starting from the latest), for example <code>mlimit:2</code>
+                    only checks the latest two messages (by default it checks
+                    all).</li>
+                <li><code>mtime:</code> limits how long ago messages are
+                    checked, for example <code>mtime:1h</code> only checks
+                    messages from the last hour, whereas <code>mtime:>1h</code>
+                    only checks messages from <em>before</em> the last hour (by
+                    default it checks all).</li>
+                <li><code>mreq:</code> defines how many messages must match, for
+                    example <code>mreq:3</code> requires at least three past
+                    messages to match (by default at least one has to match).</li>
+                <li><code>mtype:outer</code> ignores text matching in the <code>msgs:</code>
+                    prefix itself (so for <code>msgs:"mtype:outer abc"</code>
+                    the "abc" would have no effect) and instead uses the outer
+                    item's text matching. For example <code>msgs:"mtype:outer" start:!vote</code>
+                    would match if both the message and also a past message
+                    begin with "!vote" (<code>msgs:"start:!vote" start:!vote</code>
+                    would have the same effect).</li>
+            </ul>
+        </li>
         <li><code>config:</code> to specify on or more options (separated by comma, no spaces):
             <ul>
                 <li><code>config:firstmsg</code> - Restrict matching to the
@@ -1045,12 +1078,31 @@
                     match, for example <code>config:repeatedmsg|4</code> requires
                     4 repeated messages (can't be lower than the Repetition
                     Detection setting).</li>
+                <li><code>config:afterban|number</code> - Matches on the number
+                    of messages after the user was banned/timed out (based on
+                    the bans/messages visible in the User Dialog). <code>config:afterban|1</code>
+                    matches the first message after a ban, <code>config:afterban|5</code>
+                    up to the fifth message. The number is optional, so
+                    <code>config:afterban</code> matches all messages after a
+                    ban. If the user was not banned (or Chatty doesn't know
+                    about it) then this never matches.</li>
                 <li><code>config:info</code> - This item applies to info
                     messages instead of regular user messages</li>
                 <li><code>config:any</code> - This item applies to both info
                     messages and regular user messages</li>
                 <li><code>config:hl</code> - Restrict matching to user messages
                     highlighted by using channel points</li>
+                <li><code>config:highlighted</code> - Applies when the message
+                    has been highlighted through the Highlight list, doesn't
+                    work for entries on the Highlight or Ignore list.</li>
+                <li><code>config:historic</code> - Applies to messages loaded
+                    from the history service on channel join. This also allows
+                    historic message to be matched for features that are
+                    otherwise turned off in the History settings.</li>
+                <li><code>config:historic2</code> - Allows historic message to be
+                    matched for features that are otherwise turned off in the
+                    History settings, but does not restrict the match to just
+                    historic messages.</li>
                 <li><code>config:b|id/version</code> - Match a Twitch Badge
                     (version optional, if several are specified in the same
                     <code>config:</code> prefix, only one has to match).</li>
@@ -1166,6 +1218,11 @@
                 <li><code>config:!log</code> - Don't log the message to the
                     separate highlighted/ignored log file (may still be logged
                     to the channel log file)</li>
+                <li><code>config:followup</code> - Enable highlighting follow-up
+                    messages from the same user within 10s, regardless of the
+                    state of the setting in the Highlights settings
+                    (<code>config:followup|0</code> to force off regardless of
+                    setting).</li>
             </ul>
         </li>
         <li><code>n:</code> to provide a note that is ignored for matching.

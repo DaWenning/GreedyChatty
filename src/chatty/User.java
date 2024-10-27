@@ -1,6 +1,7 @@
 
 package chatty;
 
+import chatty.gui.Highlighter;
 import chatty.gui.colors.UsercolorManager;
 import chatty.util.api.usericons.Usericon;
 import chatty.util.api.usericons.UsericonManager;
@@ -330,16 +331,24 @@ public class User implements Comparable<User> {
         return numLines == userSettings.maxLines && numLines < numberOfLines;
     }
     
+    public synchronized void addMessage(String line, boolean action, String id) {
+        addMessage(line, action, id, System.currentTimeMillis());
+    }
+    
     /**
      * Adds a single chatmessage with the current time.
      * 
      * @param line 
      * @param action 
      * @param id 
+     * @param timestamp 
      */
-    public synchronized void addMessage(String line, boolean action, String id) {
+    public synchronized void addMessage(String line, boolean action, String id, long timestamp) {
+        if (timestamp == -1) {
+            timestamp = System.currentTimeMillis();
+        }
         setFirstSeen();
-        addLine(new TextMessage(System.currentTimeMillis(), line, action, id, null));
+        addLine(new TextMessage(timestamp, line, action, id, null));
         replayCachedLowTrust();
         numberOfMessages++;
     }
@@ -373,6 +382,16 @@ public class User implements Comparable<User> {
     public synchronized void addInfo(String message, String fullText) {
         setFirstSeen();
         addLine(new InfoMessage(System.currentTimeMillis(), message, fullText));
+    }
+    
+    public synchronized void addWarning(String reason, String by) {
+        setFirstSeen();
+        addLine(new WarnMessage(System.currentTimeMillis(), reason, by));
+    }
+    
+    public synchronized void addWarningAcknowledged() {
+        setFirstSeen();
+        addLine(new WarnMessage(System.currentTimeMillis(), null, null));
     }
     
     public synchronized void addModAction(ModeratorActionData data) {
@@ -572,6 +591,55 @@ public class User implements Comparable<User> {
             }
         }
         return result;
+    }
+    
+    public synchronized int getMatchingMessages(Highlighter.HighlightItem item, int num, long time, boolean beforeTime) {
+        if (lines == null) {
+            return 0;
+        }
+        int result = 0;
+        int numMsgs = 0;
+        for (int i=lines.size() - 1; i>=0; i--) {
+            Message m = lines.get(i);
+            if (beforeTime) {
+                if (m.time > time) {
+                    continue;
+                }
+            }
+            else {
+                if (m.time < time) {
+                    return result;
+                }
+            }
+            if (m instanceof TextMessage) {
+                TextMessage tm = (TextMessage) m;
+                if (item.matchesTextOnly(tm.text, null)) {
+                    result++;
+                }
+                numMsgs++;
+                if (numMsgs == num) {
+                    return result;
+                }
+            }
+        }
+        return result;
+    }
+    
+    public synchronized int getNumberOfMessagesAfterBan() {
+        if (lines == null) {
+            return -1;
+        }
+        int msgsAfterBan = 0;
+        for (int i=lines.size() - 1; i>=0; i--) {
+            Message m = lines.get(i);
+            if (m instanceof TextMessage) {
+                msgsAfterBan++;
+            }
+            else if (m instanceof BanMessage) {
+                return msgsAfterBan;
+            }
+        }
+        return -1;
     }
     
     public synchronized TextMessage getMessage(String msgId) {
@@ -1344,6 +1412,26 @@ public class User implements Comparable<User> {
         public ModAction(long time, String commandAndParameters) {
             super(time);
             this.commandAndParameters = commandAndParameters;
+        }
+        
+    }
+    
+    public static class WarnMessage extends Message {
+        
+        public final String reason;
+        public final String by;
+        
+        /**
+         * If reason and by are null, the user has acknowledge a warning.
+         * 
+         * @param time The timestamp the warning was received
+         * @param reason The message associated with the warning
+         * @param by The moderator who has issued the warning
+         */
+        public WarnMessage(long time, String reason, String by) {
+            super(time);
+            this.reason = reason;
+            this.by = by;
         }
         
     }

@@ -26,10 +26,12 @@ public class TokenInfo {
                 Scope.WHISPER_MANAGE,
                 Scope.MANAGE_COLOR,
                 Scope.POINTS,
-                Scope.FOLLOWS
+                Scope.FOLLOWS,
+                Scope.CLIPS_EDIT
         ),
         MODERATION("moderation",
                 Scope.MANAGE_CHAT,
+                Scope.MANAGE_WARNINGS,
                 Scope.MANAGE_BANS,
                 Scope.MANAGE_MSGS,
                 Scope.CHAN_MOD,
@@ -104,7 +106,9 @@ public class TokenInfo {
         MANAGE_COLOR("user:manage:chat_color", "manageColor"),
         MANAGE_RAIDS("channel:manage:raids", "manageRaids"),
         MANAGE_POLLS("channel:manage:polls", "managePolls"),
-        MANAGE_SHOUTOUTS("moderator:manage:shoutouts", "manageShoutouts");
+        MANAGE_SHOUTOUTS("moderator:manage:shoutouts", "manageShoutouts"),
+        MANAGE_WARNINGS("moderator:manage:warnings", "manageWarnings"),
+        CLIPS_EDIT("clips:edit", "editClips");
         
         public String scope;
         public String label;

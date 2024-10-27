@@ -158,7 +158,7 @@ public class HighlightSettings extends SettingsPanel {
         base.add(highlightBlacklistButton, gbc);
         
         JButton presetsButton = new JButton("Presets");
-        presetsButton.setMargin(GuiUtil.SMALLER_BUTTON_INSETS);
+        GuiUtil.smallButtonInsets(presetsButton);
         presetsButton.addActionListener(e -> {
             d.showMatchingPresets();
         });
@@ -168,7 +168,7 @@ public class HighlightSettings extends SettingsPanel {
         base.add(presetsButton, gbc);
         
         JButton substitutesButton = new JButton("Substitutes / Lookalikes");
-        substitutesButton.setMargin(GuiUtil.SMALLER_BUTTON_INSETS);
+        GuiUtil.smallButtonInsets(substitutesButton);
         substitutesButton.addActionListener(e -> {
             substitutes.show(HighlightSettings.this);
         });
@@ -350,7 +350,7 @@ public class HighlightSettings extends SettingsPanel {
     
     private static class SubstitutesEditor extends JDialog implements StringEditor {
         
-        private static final int INPUT_LENGTH_LIMIT = 100*1000;
+        private static final int INPUT_LENGTH_LIMIT = 200*1000;
         
         private final JTextArea itemValue = new JTextArea(4, 20);
         private final JTextArea info = new JTextArea(20, 68);

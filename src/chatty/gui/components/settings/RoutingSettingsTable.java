@@ -4,14 +4,19 @@ package chatty.gui.components.settings;
 import chatty.gui.GuiUtil;
 import chatty.gui.RegexDocumentFilter;
 import chatty.gui.components.routing.RoutingTargetSettings;
+import static chatty.gui.components.settings.SettingsUtil.createLabel;
 import static chatty.gui.components.settings.TableEditor.SORTING_MODE_MANUAL;
 import chatty.lang.Language;
+import chatty.util.FileUtil;
+import chatty.util.StringUtil;
 import java.awt.Component;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
@@ -32,6 +37,10 @@ import javax.swing.text.AbstractDocument;
  */
 public class RoutingSettingsTable<T extends RoutingTargetSettings> extends TableEditor<RoutingTargetSettings> {
 
+    private static final int NAME_COLUMN = 0;
+    private static final int SETTINGS_COLUMN = 1;
+    private static final int LOG_COLUMN = 2;
+    
     private final MyTableModel<T> data;
     private MyItemEditor<T> editor;
     
@@ -47,21 +56,25 @@ public class RoutingSettingsTable<T extends RoutingTargetSettings> extends Table
             return editor;
         });
         
-        setFixedColumnWidth(0, 200);
+        setFixedColumnWidth(NAME_COLUMN, 180);
     }
     
     private static class MyTableModel<T extends RoutingTargetSettings> extends ListTableModel<RoutingTargetSettings> {
         
         public MyTableModel() {
-            super(new String[]{"Name", "Settings"});
+            super(new String[]{"Name", "Settings", "Log file"});
         }
 
         @Override
         public Object getValueAt(int rowIndex, int columnIndex) {
             RoutingTargetSettings entry = get(rowIndex);
             switch (columnIndex) {
-                case 0: return entry.getName();
-                case 1: return entry.makeInfo();
+                case NAME_COLUMN:
+                    return entry.getName();
+                case SETTINGS_COLUMN:
+                    return entry.makeSettingsInfo();
+                case LOG_COLUMN:
+                    return entry.getFullLogFilename();
             }
             return "";
         }
@@ -86,11 +99,14 @@ public class RoutingSettingsTable<T extends RoutingTargetSettings> extends Table
     
     public static class MyItemEditor<T extends RoutingTargetSettings> implements TableEditor.ItemEditor<RoutingTargetSettings> {
         
+        private static final String HTML_PREFIX = "<html><body style='width:200px;'>";
+        
         private final JDialog dialog;
         private final JTextField name = new JTextField(10);
         private final JCheckBox logEnabled = new JCheckBox(Language.getString("settings.customTabSettings.logEnabled"));
         private final JTextField logFile = new JTextField(10);
         private final ComboLongSetting openOnMessage;
+        private final ComboLongSetting channelLogo;
         private final JCheckBox exclusive;
         private final JRadioButton multiChannelAll = new JRadioButton();
         private final JRadioButton multiChannelSep = new JRadioButton();
@@ -116,7 +132,7 @@ public class RoutingSettingsTable<T extends RoutingTargetSettings> extends Table
             SettingsUtil.setTextAndTooltip(multiChannelSepAndAll, "settings.customTabSettings.multiChannelSepAndAll");
             SettingsUtil.setTextAndTooltip(channelFixed, "settings.customTabSettings.channelFixed");
             
-            ((AbstractDocument) logFile.getDocument()).setDocumentFilter(new RegexDocumentFilter("[^a-zA-Z]"));
+            ((AbstractDocument) logFile.getDocument()).setDocumentFilter(new RegexDocumentFilter(FileUtil.ILLEGAL_FILENAME_CHARACTERS_PATTERN.pattern(), logFile));
             
             name.getDocument().addDocumentListener(new DocumentListener() {
 
@@ -166,11 +182,21 @@ public class RoutingSettingsTable<T extends RoutingTargetSettings> extends Table
             dialog.add(name, gbc);
             
             
+            JPanel generalPanel = new JPanel(new GridBagLayout());
+            generalPanel.setBorder(BorderFactory.createTitledBorder("General"));
+            
             openOnMessage = new ComboLongSetting(RoutingTargetSettings.getOpenOnMessageValues());
+            channelLogo = new ComboLongSetting(makeChannelLogoValues());
             exclusive = new JCheckBox("Exclusive");
             
-            dialog.add(openOnMessage,
+            generalPanel.add(openOnMessage,
                     GuiUtil.makeGbc(1, 1, 2, 1, GridBagConstraints.WEST));
+            
+            generalPanel.add(new JLabel("Channel Logos:"),
+                    GuiUtil.makeGbc(1, 2, 1, 1, GridBagConstraints.WEST));
+            
+            generalPanel.add(channelLogo,
+                       GuiUtil.makeGbc(2, 2, 1, 1, GridBagConstraints.WEST));
 //            dialog.add(exclusive,
 //                    GuiUtil.makeGbc(1, 4, 2, 1, GridBagConstraints.WEST));
             
@@ -193,7 +219,7 @@ public class RoutingSettingsTable<T extends RoutingTargetSettings> extends Table
             multiChannelPanel.add(channelFixed, gbc);
             
             gbc = SettingsDialog.makeGbc(0, 4, 2, 1, GridBagConstraints.CENTER);
-            multiChannelPanel.add(new JLabel("<html><body style='width:200px;'>Switch channels through the context menu. Changing this setting only applies to new messages."), gbc);
+            multiChannelPanel.add(new JLabel(HTML_PREFIX+"Switch channels through the context menu. Changing this setting only applies to new messages."), gbc);
             
             SettingsUtil.addSubsettings(
                     new JRadioButton[]{multiChannelSep, multiChannelSepAndAll},
@@ -205,20 +231,38 @@ public class RoutingSettingsTable<T extends RoutingTargetSettings> extends Table
             JPanel logPanel = new JPanel(new GridBagLayout());
             logPanel.setBorder(BorderFactory.createTitledBorder("Log to file"));
             
-            gbc = GuiUtil.makeGbc(0, 0, 3, 1, GridBagConstraints.WEST);
+            // Log enabled
+            gbc = GuiUtil.makeGbc(0, 0, 4, 1, GridBagConstraints.WEST);
             logPanel.add(logEnabled, gbc);
             
-            SettingsUtil.addLabeledComponent(logPanel,
-                    "settings.customTabSettings.logFile",
-                    0, 1, 1, GridBagConstraints.WEST,
-                    logFile, true);
+            // Log file name
+            JLabel logFileLabel = createLabel("settings.customTabSettings.logFile");
+            logFileLabel.setLabelFor(logFile);
+            gbc = GuiUtil.makeGbc(0, 1, 1, 1, GridBagConstraints.WEST);
+            logPanel.add(logFileLabel, gbc);
+            
+            gbc = GuiUtil.makeGbc(1, 1, 1, 1, GridBagConstraints.WEST);
+            gbc.insets = new Insets(5, 0, 5, 0);
+            logPanel.add(new JLabel("customTab-"), gbc);
             
             gbc = GuiUtil.makeGbc(2, 1, 1, 1, GridBagConstraints.WEST);
+            gbc.insets = new Insets(5, 2, 5, 2);
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.weightx = 1;
+            logPanel.add(logFile, gbc);
+            
+            gbc = GuiUtil.makeGbc(3, 1, 1, 1, GridBagConstraints.WEST);
             gbc.insets = new Insets(5, 0, 5, 5);
             logPanel.add(new JLabel(".log"), gbc);
             
-            gbc = GuiUtil.makeGbc(0, 2, 3, 1, GridBagConstraints.WEST);
-            logPanel.add(new JLabel(Language.getString("settings.customTabSettings.logInfo")), gbc);
+            // Log info
+            gbc = GuiUtil.makeGbc(0, 2, 4, 1, GridBagConstraints.WEST);
+            logPanel.add(new JLabel(HTML_PREFIX+Language.getString("settings.customTabSettings.logInfo")), gbc);
+            
+            gbc = GuiUtil.makeGbc(0, 6, 3, 1);
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.weightx = 1;
+            dialog.add(generalPanel, gbc);
             
             gbc = GuiUtil.makeGbc(0, 7, 3, 1);
             gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -258,9 +302,13 @@ public class RoutingSettingsTable<T extends RoutingTargetSettings> extends Table
             if (preset != null) {
                 name.setText(preset.getName());
                 openOnMessage.setSettingValue((long) preset.openOnMessage);
+                channelLogo.setSettingValue((long) preset.channelLogo);
                 exclusive.setSelected(preset.exclusive);
                 logEnabled.setSelected(preset.logEnabled);
-                logFile.setText(preset.logFile);
+                logFile.setText(preset.getRawLogFilename());
+                if (StringUtil.isNullOrEmpty(preset.getRawLogFilename())) {
+                    logFile.setText(preset.getName());
+                }
                 switch (preset.multiChannel) {
                     case 0:
                         multiChannelAll.setSelected(true);
@@ -276,6 +324,7 @@ public class RoutingSettingsTable<T extends RoutingTargetSettings> extends Table
             } else {
                 name.setText(null);
                 openOnMessage.setSettingValue(1L);
+                channelLogo.setSettingValue((long) RoutingTargetSettings.CHANNEL_LOGO_DEFAULT);
                 exclusive.setSelected(false);
                 logEnabled.setSelected(false);
                 logFile.setText(null);
@@ -297,7 +346,8 @@ public class RoutingSettingsTable<T extends RoutingTargetSettings> extends Table
                         logFile.getText(),
                         getMultiChannelValue(),
                         channelFixed.isSelected(),
-                        preset != null ? preset.showAll : false);
+                        preset != null ? preset.showAll : false,
+                        channelLogo.getSettingValue().intValue());
             }
             return null;
         }
@@ -315,6 +365,15 @@ public class RoutingSettingsTable<T extends RoutingTargetSettings> extends Table
         private void updateButtons() {
             boolean enabled = !name.getText().isEmpty();
             ok.setEnabled(enabled);
+        }
+        
+        private Map<Long, String> makeChannelLogoValues() {
+            Map<Long, String> result = new LinkedHashMap<>();
+            result.put(0L, "Off");
+            for (int i = 12; i <= 30; i += 2) {
+                result.put((long) i, i + "px");
+            }
+            return result;
         }
         
     }

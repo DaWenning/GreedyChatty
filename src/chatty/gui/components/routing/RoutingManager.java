@@ -15,6 +15,7 @@ import chatty.gui.components.textpane.UserMessage;
 import chatty.util.Pair;
 import chatty.util.StringUtil;
 import chatty.util.chatlog.ChatLog;
+import chatty.util.history.HistoryUtil;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -126,27 +127,38 @@ public class RoutingManager {
         for (Map.Entry<String, Pair<String, HighlightItem>> t : targets.getResultTargets().entrySet()) {
             String name = t.getValue().key;
             HighlightItem hlItem = t.getValue().value;
-            RoutingTarget target = getTarget(name);
-            UserMessage thisMessage = message.copy();
-            thisMessage.routingSource = hlItem;
-            target.addMessage(localUser.getChannel(), thisMessage);
             
-            
-            RoutingTargetSettings ts = getSettings(name);
-            
-            switch (ts.openOnMessage) {
-                case 1: // Any message
-                case 2: // Regular chat message
-                    channels.addContent(target.getContent());
-            }
-            
-            if (ts.shouldLog()) {
-                chatLog.message(ts.logFile, message.user, message.text, message.action, message.user.getChannel());
+            if (HistoryUtil.checkAllowMatch(message.tags, "Routing", hlItem, main.getSettings())) {
+                RoutingTarget target = getTarget(name);
+                UserMessage thisMessage = message.copy();
+                thisMessage.routingSource = hlItem;
+                target.addMessage(localUser.getChannel(), thisMessage);
+
+                
+                RoutingTargetSettings ts = getSettings(name);
+
+                switch (ts.openOnMessage) {
+                    case 1: // Any message
+                    case 2: // Regular chat message
+                        channels.addContent(target.getContent());
+                }
+
+                if (ts.shouldLog() && (message.tags == null || !message.tags.isHistoricMsg())) {
+                    chatLog.message(ts.getPrefixedLogFilename(), message.user, message.text, message.action, message.user.getChannel());
+                }
             }
         }
     }
     
-    public void addInfoMessage(RoutingTargets targets, InfoMessage message, User user, User localUser) {
+    /**
+     * 
+     * @param targets
+     * @param message
+     * @param user
+     * @param localUser May be null (e.g. if before channel joined)
+     * @param channel 
+     */
+    public void addInfoMessage(RoutingTargets targets, InfoMessage message, User user, User localUser, Channel channel) {
         if (!filterTargets(targets)) {
             addRoutingTargets(targets, message, user, localUser);
         }
@@ -163,7 +175,7 @@ public class RoutingManager {
             InfoMessage thisMessage = message.copy();
             thisMessage.routingSource = hlItem;
             thisMessage.localUser = localUser;
-            target.addInfoMessage(localUser.getChannel(), thisMessage);
+            target.addInfoMessage(channel.getChannel(), thisMessage);
             
             RoutingTargetSettings ts = getSettings(name);
             
@@ -174,7 +186,7 @@ public class RoutingManager {
             }
             
             if (ts.shouldLog()) {
-                chatLog.info(ts.logFile, message.text, localUser != null ? localUser.getChannel() : null);
+                chatLog.info(ts.getPrefixedLogFilename(), message.text, channel.getChannel());
             }
         }
     }
@@ -204,7 +216,7 @@ public class RoutingManager {
         }
         
         if (ts.shouldLog()) {
-            chatLog.info(ts.logFile, msg.text, null);
+            chatLog.info(ts.getPrefixedLogFilename(), msg.text, null);
         }
     }
     
@@ -268,6 +280,7 @@ public class RoutingManager {
     protected void updateSettings(String targetId, RoutingTargetSettings settings) {
         entries.put(targetId, settings);
         targets.get(targetId).settingsUpdated();
+        saveSettings();
     }
     
     public static String toId(String name) {
@@ -282,7 +295,8 @@ public class RoutingManager {
         String targetId = toId(targetName);
         RoutingTargetSettings entry = entries.get(targetId);
         if (entry == null) {
-            entry = new RoutingTargetSettings(targetName, 1, true, false, "", 0, false, false);
+            entry = new RoutingTargetSettings(targetName, 1, true, false, "", 0, false, false,
+                    RoutingTargetSettings.CHANNEL_LOGO_DEFAULT);
             entries.put(targetId, entry);
         }
         return entry;
